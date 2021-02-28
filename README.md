@@ -9,6 +9,10 @@ so Vault starts sending audit logs to vault-sync.
 Using these audit logs, vault-sync keeps the secrets in the destination Vault up to date.
 Periodically, vault-sync does a full reconciliation to make sure all the destination secrets are up to date.
 
+It is possible to use the same Vault instance as the source and the destination.
+You can use this feature to replicate a "folder" of secrets to another "folder" on the same server.
+You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the configuration file to make sure the source and the destination do not overlap.
+
 ## Limitations
 * Only two Vault auth methods are supported: [Token](https://www.vaultproject.io/docs/auth/token) and [AppRole](https://www.vaultproject.io/docs/auth/approle)
 * Only secrets from the default secrets mount path `secret` are supported for the source and destination Vaults (this is due the limitation of the Vault client library)
