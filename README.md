@@ -15,6 +15,7 @@ You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the co
 
 ## Limitations
 * Only two Vault auth methods are supported: [Token](https://www.vaultproject.io/docs/auth/token) and [AppRole](https://www.vaultproject.io/docs/auth/approle)
+* Only secrets are replicated (specifically their latest versions)
 * Only secrets from the default secrets mount path `secret` are supported for the source and destination Vaults (this is due the limitation of the Vault client library)
 * Deleting secrets is not supported (also due to the limitation of the Vault client library, which does not support deleting secret's metadata)
 
