@@ -19,7 +19,7 @@ You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the co
 * Deleting secrets is not supported (also due to the limitation of the Vault client library, which does not support deleting secret's metadata)
 
 ## Configuration
-Use [vault-sync.example.yaml] to create a configuration file.
+Use the [example](vault-sync.example.yaml) to create your own configuration file.
 Instead of specifying secrets in the configuration file, you can use environment variables:
 * For Token auth method:
   * `VAULT_SYNC_SRC_TOKEN`
