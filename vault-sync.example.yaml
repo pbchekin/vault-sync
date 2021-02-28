@@ -27,13 +27,13 @@ src:
   # Vault Token auth method
   # Set token (or environment variable VAULT_SYNC_SRC_TOKEN)
   # token: ***
-  # token_ttl: 86400 # 12h
+  # token_ttl: 86400 # optional, 12h
 
   # Vault AppRole auth method
   # Set role_id and secret_id (or environment variables VAULT_SYNC_SRC_ROLE_ID and VAULT_SYNC_SRC_SECRET_ID)
   # role_id: ***
   # secret_id: ***
-  # token_ttl: 86400 # 12h
+  # token_ttl: 86400 # optional, 12h
   # token_max_ttl: 2764800 # 32d
 
 # Destination Vault configuration to sync secrets to.
@@ -49,11 +49,11 @@ dst:
   # Vault Token auth method
   # Set token (or environment variable VAULT_SYNC_DST_TOKEN)
   # token: ***
-  # token_ttl: 86400 # 12h
+  # token_ttl: 86400 # optional, 12h
 
   # Vault AppRole auth method
   # Set role_id and secret_id (or environment variables VAULT_SYNC_DST_ROLE_ID and VAULT_SYNC_DST_SECRET_ID)
   # role_id: ***
   # secret_id: ***
-  # token_ttl: 86400 # 12h
+  # token_ttl: 86400 # optional, 12h
   # token_max_ttl: 2764800 # 32d
