@@ -1,0 +1,59 @@
+# Configuration file for vault-sync
+# https://github.com/pbchekin/vault-sync
+
+# Name for this vault-sync instance. If there are multiple vault-sync instances running for the same
+# source Vault, then this name must be unique for each instance.
+id: vault-sync
+
+# Time between full syncs. The full sync usually runs when vault-sync starts, then vault-sync only
+# apply changes for the secrets. However, vault-sync also does the full sync every this interval.
+# It does not do any changes to the destination, if the source secrets are not changed.
+full_sync_interval: 86400 # 12h
+
+# Address and port for this vault-sync to listen for Vault audit log.
+bind: 0.0.0.0:8202
+
+# This vault-sync instance must be accessible from the source Vault via this address and port.
+external_address: host.docker.internal:8202
+
+# Source Vault configuration to sync secrets from.
+src:
+  # Vault URL
+  url: http://127.0.0.1:8200/
+  # Prefix for secrets: only secrets with path starting from this prefix will be synchronized with
+  # the target Vault. Use empty string ("") for all secrets.
+  prefix: ""
+
+  # Vault Token auth method
+  # Set token (or environment variable VAULT_SYNC_SRC_TOKEN)
+  # token: ***
+  # token_ttl: 86400 # 12h
+
+  # Vault AppRole auth method
+  # Set role_id and secret_id (or environment variables VAULT_SYNC_SRC_ROLE_ID and VAULT_SYNC_SRC_SECRET_ID)
+  # role_id: ***
+  # secret_id: ***
+  # token_ttl: 86400 # 12h
+  # token_max_ttl: 2764800 # 32d
+
+# Destination Vault configuration to sync secrets to.
+dst:
+  # Vault URL
+  url: http://127.0.0.1:8200/
+  # Prefix for secrets: this prefix will replace the corresponding prefix from the 'src' section.
+  # This allows syncing a tree of secrets to an non overlapping tree in the same Vault.
+  # For example: if src.prefix is "src" and dst.prefix is "dst", then secret "src/secret1" will be
+  # synced to "dst/secret1".
+  prefix: ""
+
+  # Vault Token auth method
+  # Set token (or environment variable VAULT_SYNC_DST_TOKEN)
+  # token: ***
+  # token_ttl: 86400 # 12h
+
+  # Vault AppRole auth method
+  # Set role_id and secret_id (or environment variables VAULT_SYNC_DST_ROLE_ID and VAULT_SYNC_DST_SECRET_ID)
+  # role_id: ***
+  # secret_id: ***
+  # token_ttl: 86400 # 12h
+  # token_max_ttl: 2764800 # 32d
