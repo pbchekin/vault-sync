@@ -14,6 +14,8 @@ full_sync_interval: 86400 # 12h
 bind: 0.0.0.0:8202
 
 # This vault-sync instance must be accessible from the source Vault via this address and port.
+# Warning: the protocol is JSON over TCP, not secure. You need to make sure only the source Vault
+# instance can connect to that endpoint.
 external_address: host.docker.internal:8202
 
 # Source Vault configuration to sync secrets from.

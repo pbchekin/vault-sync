@@ -41,10 +41,10 @@ A token or AppRole for the source Vault should have a policy that allows listing
 
 ```shell
 cat <<EOF | vault policy write vault-sync-src -
-path "secret/data*" {
+path "secret/data/*" {
   capabilities = ["read", "list"]
 }
-path "secret/metadata*" {
+path "secret/metadata/*" {
   capabilities = ["read", "list"]
 }
 path "sys/audit*" {
@@ -78,7 +78,7 @@ A token or AppRole for the source Vault should have a policy that allows operati
 
 ```shell
 cat <<EOF | vault policy write vault-sync-dst -
-path "secret/data*" {
+path "secret/data/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 EOF
