@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 
 use hashicorp_vault::client::{EndpointResponse, HttpVerb};
-use hashicorp_vault::client::error::Result as VaultResult;
 use log::{debug, info, warn};
 use serde_json::Value;
 
@@ -32,42 +31,6 @@ pub fn audit_device_exists(name: &str, client: &VaultClient) -> bool {
         }
     }
     false
-}
-
-pub fn audit_device_add(name: &str, address: &str, client: &VaultClient) -> VaultResult<()> {
-    let request = audit::CreateAuditDeviceRequest {
-        audit_device_type: "socket".to_string(),
-        options: audit::AuditDeviceOptions {
-            address: address.to_string(),
-            socket_type: "tcp".to_string(),
-        }
-    };
-    let body = serde_json::to_string(&request)?;
-    match client.call_endpoint::<Value>(HttpVerb::PUT, &audit_device_endpoint(name), None, Some(&body)) {
-        Ok(response) => {
-            debug!("PUT sys/audit/{}: {:?}", name, response);
-            Ok(())
-        },
-        Err(error) => {
-            warn!("PUT sys/audit/{}: {}", name, error);
-            Err(error)
-        }
-    }
-}
-
-pub fn audit_device_delete(name: &str, client: &VaultClient) {
-    match client.call_endpoint::<()>(HttpVerb::DELETE, &audit_device_endpoint(name), None, None) {
-        Ok(_) => {
-            debug!("DELETE sys/audit/{}: OK", name);
-        },
-        Err(error) => {
-            warn!("DELETE sys/audit/{}: {}", name, error);
-        }
-    }
-}
-
-fn audit_device_endpoint(name: &str) -> String {
-    format!("sys/audit/{}", name)
 }
 
 pub fn full_sync_worker(

@@ -8,15 +8,10 @@ id: vault-sync
 # Time between full syncs. The full sync usually runs when vault-sync starts, then vault-sync only
 # apply changes for the secrets. However, vault-sync also does the full sync every this interval.
 # It does not do any changes to the destination, if the source secrets are not changed.
-full_sync_interval: 86400 # 12h
+full_sync_interval: 3600 # 1h
 
 # Address and port for this vault-sync to listen for Vault audit log.
 bind: 0.0.0.0:8202
-
-# This vault-sync instance must be accessible from the source Vault via this address and port.
-# Warning: the protocol is JSON over TCP, not secure. You need to make sure only the source Vault
-# instance can connect to that endpoint.
-external_address: host.docker.internal:8202
 
 # Source Vault configuration to sync secrets from.
 src:

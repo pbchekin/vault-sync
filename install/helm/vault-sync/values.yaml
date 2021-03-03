@@ -4,9 +4,8 @@
 
 vaultSync:
   id: vault-sync
-  full_sync_interval: 86400
+  full_sync_interval: 3600
   bind: 0.0.0.0:8202
-  external_address: vault-sync:8202
   src:
     url: http://127.0.0.1:8200/
     prefix: ""

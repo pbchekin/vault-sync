@@ -5,8 +5,6 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 
 use clap::{crate_authors, crate_version, Arg, App};
-use ctrlc;
-use hashicorp_vault::client::error::Result as VaultResult;
 use log::{error, info};
 use simplelog::*;
 
@@ -36,10 +34,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     let config = load_config(matches.value_of("config").unwrap())?;
-    let device_name = config.id.clone();
+
+    let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
+    let log_sync = log_sync_worker(&config.bind, &config.src.prefix, tx.clone())?;
 
     info!("Connecting to {}", &config.src.host.url);
     let src_client = vault_client(&config.src.host)?;
+    info!("Audit device vault-sync exists: {}", sync::audit_device_exists(&config.id, &src_client));
     let shared_src_client = Arc::new(Mutex::new(src_client));
     let src_token = token_worker(&config.src.host, shared_src_client.clone());
 
@@ -48,7 +49,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let shared_dst_client = Arc::new(Mutex::new(dst_client));
     let dst_token = token_worker(&config.dst.host, shared_dst_client.clone());
 
-    let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
     let sync = sync_worker(
         rx,
         &config.src.prefix,
@@ -58,15 +58,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         matches.is_present("dry-run")
     );
 
-    delete_audit_device(&device_name, &shared_src_client.clone().lock().unwrap());
-    let log_sync = log_sync_worker(&config.bind, &config.src.prefix, tx.clone())?;
-    add_audit_device(&device_name, &config.external_address, &shared_src_client.clone().lock().unwrap())?;
-    ctrlc_handler(&device_name, shared_src_client.clone())?;
-
     let full_sync = full_sync_worker(&config, shared_src_client.clone(), tx.clone());
-
     let _ = (sync.join(), log_sync.join(), full_sync.join(), src_token.join(), dst_token.join());
-
     Ok(())
 }
 
@@ -118,19 +111,6 @@ fn sync_worker(
     })
 }
 
-fn delete_audit_device(device_name: &str, client: &VaultClient) {
-    sync::audit_device_delete(device_name, client);
-}
-
-fn add_audit_device(device_name: &str, external_address: &str, client: &VaultClient) -> VaultResult<()> {
-    if let Err(error) = sync::audit_device_add(device_name, external_address, client) {
-        error!("Failed to add Vault audit device: {}", error);
-        return Err(error.into());
-    }
-    info!("Audit device vault-sync exists: {}", sync::audit_device_exists(device_name, client));
-    Ok(())
-}
-
 fn log_sync_worker(addr: &str, prefix: &str, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
     let prefix = prefix.to_string();
     info!("Listening on {}", addr);
@@ -159,17 +139,4 @@ fn full_sync_worker(
     thread::spawn(move || {
         sync::full_sync_worker(&prefix, interval, client, tx);
     })
-}
-
-fn ctrlc_handler(device_name: &str, client: Arc<Mutex<VaultClient>>) -> Result<(), Box<dyn Error>> {
-    let device_name = device_name.to_string();
-    match ctrlc::set_handler(move || {
-        info!("Shutting down");
-        let client = client.lock().unwrap();
-        delete_audit_device(&device_name, &client);
-        std::process::exit(0);
-    }) {
-        Ok(()) => Ok(()),
-        Err(error) => Err(error.into())
-    }
 }
