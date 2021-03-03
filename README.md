@@ -121,10 +121,17 @@ cargo build --release
 Assuming your configuration file `vault-sync.yaml` is in the current directory: 
 
 ```shell
-docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.1.0 \
+docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.2.0 \
   vault-sync --config /vault-sync/vault-sync.yaml
 ```
 
 ### Helm chart
 
-TODO
+```shell
+git clone 
+cd install/helm/vault-sync/
+kubectl create ns vault-sync
+kubens vault-sync
+# create myvaules.yaml, using values.yaml as the example
+helm install vault-sync -f myvaules.yaml .
+```
