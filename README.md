@@ -142,7 +142,7 @@ cargo build --release
 Assuming your configuration file `vault-sync.yaml` is in the current directory: 
 
 ```shell
-docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.2.0 \
+docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.3.0 \
   vault-sync --config /vault-sync/vault-sync.yaml
 ```
 
