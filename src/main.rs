@@ -36,7 +36,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = load_config(matches.value_of("config").unwrap())?;
 
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
-    let log_sync = log_sync_worker(&config.bind, &config.src.prefix, tx.clone())?;
+    let mut log_sync: Option<thread::JoinHandle<()>> = None;
+    if let Some(bind) = &config.bind {
+        log_sync = Some(log_sync_worker(bind, &config.src.prefix, tx.clone())?);
+    }
 
     info!("Connecting to {}", &config.src.host.url);
     let src_client = vault_client(&config.src.host)?;
@@ -59,7 +62,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let full_sync = full_sync_worker(&config, shared_src_client.clone(), tx.clone());
-    let _ = (sync.join(), log_sync.join(), full_sync.join(), src_token.join(), dst_token.join());
+    if config.bind.is_some() {
+        let _ = (sync.join(), full_sync.join(), src_token.join(), dst_token.join());
+    } else {
+        let _ = (sync.join(), log_sync.unwrap().join(), full_sync.join(), src_token.join(), dst_token.join());
+    }
     Ok(())
 }
 

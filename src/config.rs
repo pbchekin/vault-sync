@@ -48,7 +48,7 @@ pub struct VaultDestination {
 pub struct VaultSyncConfig {
     pub id: String,
     pub full_sync_interval: u64,
-    pub bind: String,
+    pub bind: Option<String>,
     pub src: VaultSource,
     pub dst: VaultDestination,
 }
