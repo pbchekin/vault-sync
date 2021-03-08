@@ -5,7 +5,7 @@
 vaultSync:
   id: vault-sync
   full_sync_interval: 3600
-  bind: 0.0.0.0:8202
+#  bind: 0.0.0.0:8202
   src:
     url: http://127.0.0.1:8200/
     prefix: ""
@@ -32,7 +32,7 @@ image:
   repository: pbchekin/vault-sync
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0.3.0"
+  tag: "0.5.0"
 
 imagePullSecrets: []
 nameOverride: ""

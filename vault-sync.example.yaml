@@ -10,8 +10,9 @@ id: vault-sync
 # It does not do any changes to the destination, if the source secrets are not changed.
 full_sync_interval: 3600 # 1h
 
-# Address and port for this vault-sync to listen for Vault audit log.
-bind: 0.0.0.0:8202
+# Optional address and port for this vault-sync to listen for the Vault audit log. Set this if you
+# are planning to use the Vault audit device.
+# bind: 0.0.0.0:8202
 
 # Source Vault configuration to sync secrets from.
 src:

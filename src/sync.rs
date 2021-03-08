@@ -39,13 +39,9 @@ pub fn full_sync_worker(
     client: Arc<Mutex<VaultClient>>,
     tx: mpsc::Sender<SecretOp>
 ) {
-    let prefix= normalize_prefix(prefix);
     info!("FullSync worker started");
     loop {
-        info!("FullSync started");
-        let now = time::Instant::now();
-        full_sync(&prefix, client.clone(), tx.clone());
-        info!("FullSync finished in {}ms", now.elapsed().as_millis());
+        full_sync(prefix, client.clone(), tx.clone());
         thread::sleep(interval);
     }
 }
@@ -56,7 +52,15 @@ struct Item {
     index: usize,
 }
 
-fn full_sync(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
+pub fn full_sync(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
+    let prefix= normalize_prefix(prefix);
+    info!("FullSync started");
+    let now = time::Instant::now();
+    full_sync_internal(&prefix, client, tx);
+    info!("FullSync finished in {}ms", now.elapsed().as_millis());
+}
+
+fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
     let mut stack: Vec<Item> = Vec::new();
     let item = Item {
         parent: prefix.to_string(),
@@ -105,6 +109,7 @@ fn full_sync(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<Sec
         }
         stack.pop();
     }
+    let _ = tx.send(SecretOp::FullSyncFinished);
 }
 
 pub fn log_sync(prefix: &str, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
@@ -155,6 +160,22 @@ pub enum SecretOp {
     Create(String),
     Update(String),
     Delete(String),
+    FullSyncFinished,
+}
+
+struct SyncStats {
+    updated: u64,
+    deleted: u64,
+}
+
+impl SyncStats {
+    fn new() -> SyncStats {
+        SyncStats { updated: 0, deleted: 0 }
+    }
+    fn reset(&mut self) {
+        self.updated = 0;
+        self.deleted = 0;
+    }
 }
 
 pub fn sync_worker(
@@ -164,10 +185,12 @@ pub fn sync_worker(
     src_client: Arc<Mutex<VaultClient>>,
     dst_client: Arc<Mutex<VaultClient>>,
     dry_run: bool,
+    run_once: bool,
 ) {
     let src_prefix = normalize_prefix(src_prefix);
     let dst_prefix = normalize_prefix(dst_prefix);
     info!("Sync worker started");
+    let mut stats = SyncStats::new();
     loop {
         let op = rx.recv();
         if let Ok(op) = op {
@@ -200,6 +223,8 @@ pub fn sync_worker(
                         };
                         if let Err(error) = result {
                             warn!("Failed to set secret {}: {}", &dst_path, error);
+                        } else {
+                            stats.updated += 1;
                         }
                     }
                 },
@@ -209,8 +234,17 @@ pub fn sync_worker(
                     if !dry_run {
                         let client = dst_client.lock().unwrap();
                         let _ = client.delete_secret(&secret);
+                    } else {
+                        stats.deleted += 1;
                     }
-                }
+                },
+                SecretOp::FullSyncFinished => {
+                    info!("Secrets created/updated: {}, deleted: {}", &stats.updated, &stats.deleted);
+                    stats.reset();
+                    if run_once {
+                        break;
+                    }
+                },
             }
         }
     }

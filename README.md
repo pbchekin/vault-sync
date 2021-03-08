@@ -126,8 +126,14 @@ vault write -f auth/approle/role/vault-sync-dst/secret-id
 
 ## Running
 
-Then run `vault-sync --config vault-sync.yaml`.
-With the command line option `--dry-run` vault-sync shows all the changes it is going to make to the destination Vault, but does not do any actual changes.
+```shell
+vault-sync --config vault-sync.yaml
+```
+
+Command line options:
+
+* `--dry-run` vault-sync shows all the changes it is going to make to the destination Vault, but does not do any actual changes.
+* `--once` runs the full sync once, then exits.
 
 ## Installation
 
@@ -142,7 +148,7 @@ cargo build --release
 Assuming your configuration file `vault-sync.yaml` is in the current directory: 
 
 ```shell
-docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.3.0 \
+docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.5.0 \
   vault-sync --config /vault-sync/vault-sync.yaml
 ```
 

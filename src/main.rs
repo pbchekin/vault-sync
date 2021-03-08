@@ -31,15 +31,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg(Arg::with_name("dry-run")
             .long("dry-run")
             .help("Do not do any changes with the destination Vault"))
+        .arg(Arg::with_name("once")
+            .long("once")
+            .help("Run the full sync once, then exit"))
         .get_matches();
 
     let config = load_config(matches.value_of("config").unwrap())?;
 
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
-    let mut log_sync: Option<thread::JoinHandle<()>> = None;
-    if let Some(bind) = &config.bind {
-        log_sync = Some(log_sync_worker(bind, &config.src.prefix, tx.clone())?);
-    }
+
+    let log_sync = if let Some(bind) = &config.bind {
+        Some(log_sync_worker(bind, &config.src.prefix, tx.clone())?)
+    } else {
+        None
+    };
 
     info!("Connecting to {}", &config.src.host.url);
     let src_client = vault_client(&config.src.host)?;
@@ -58,15 +63,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         &config.dst.prefix,
         shared_src_client.clone(),
         shared_dst_client.clone(),
-        matches.is_present("dry-run")
+        matches.is_present("dry-run"),
+        matches.is_present("once"),
     );
 
-    let full_sync = full_sync_worker(&config, shared_src_client.clone(), tx.clone());
-    if config.bind.is_some() {
-        let _ = (sync.join(), log_sync.unwrap().join(), full_sync.join(), src_token.join(), dst_token.join());
+    let mut join_handlers = vec![sync];
+
+    if !matches.is_present("once") {
+        let full_sync = full_sync_worker(&config, shared_src_client.clone(), tx.clone());
+        join_handlers.push(full_sync);
+        join_handlers.push(src_token);
+        join_handlers.push(dst_token);
+        if log_sync.is_some() {
+            join_handlers.push(log_sync.unwrap());
+        }
     } else {
-        let _ = (sync.join(), full_sync.join(), src_token.join(), dst_token.join());
+        sync::full_sync(&config.src.prefix, shared_src_client.clone(), tx.clone());
+    };
+
+    // Join all threads
+    for handler in join_handlers {
+        let _ = handler.join();
     }
+
     Ok(())
 }
 
@@ -109,12 +128,13 @@ fn sync_worker(
     src_client: Arc<Mutex<VaultClient>>,
     dst_client: Arc<Mutex<VaultClient>>,
     dry_run: bool,
+    run_once: bool,
 ) -> thread::JoinHandle<()> {
     info!("Dry run: {}", dry_run);
     let src_prefix = src_prefix.to_string();
     let dst_prefix = dst_prefix.to_string();
     thread::spawn(move || {
-        sync::sync_worker(rx, &src_prefix, &dst_prefix, src_client, dst_client, dry_run);
+        sync::sync_worker(rx, &src_prefix, &dst_prefix, src_client, dst_client, dry_run, run_once);
     })
 }
 
