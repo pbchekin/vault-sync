@@ -159,6 +159,6 @@ git clone https://github.com/pbchekin/vault-sync.git
 cd install/helm/vault-sync/
 kubectl create ns vault-sync
 kubens vault-sync
-# create myvaules.yaml, using values.yaml as the example
-helm install vault-sync -f myvaules.yaml .
+# create myvalues.yaml, using values.yaml as the example
+helm install vault-sync -f myvalues.yaml .
 ```
