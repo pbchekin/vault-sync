@@ -1,8 +1,6 @@
 name: CI
 
-on:
-  - push
-  - pull_request
+on: push
 
 env:
   CARGO_TERM_COLOR: always
@@ -73,4 +71,15 @@ jobs:
         export VAULT_SYNC_SRC_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-reader/secret-id -format=json | jq -r .data.secret_id)
         export VAULT_SYNC_DST_ROLE_ID=$(vault read auth/approle/role/vault-sync-writer/role-id -format=json | jq -r .data.role_id)
         export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
+        EOF
+
+        cat <<EOF > ./vault-sync.yaml
+        id: vault-sync
+        full_sync_interval: 10
+        src:
+          url: http://127.0.0.1:8200/
+          prefix: src
+        dst:
+          url: http://127.0.0.1:8200/
+          prefix: dst
         EOF
