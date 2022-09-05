@@ -83,3 +83,20 @@ jobs:
           url: http://127.0.0.1:8200/
           prefix: dst
         EOF
+
+    - name: Test sync once with token
+      run: |
+        export VAULT_ADDR='http://127.0.0.1:8200'
+        vault kv put secret/src/testsecret1 foo1=bar1
+        source ./vault-sync-token.env
+        cargo run -- --config vault-sync.yaml --once
+        vault kv read secret/dst/testsecret1
+
+    - name: Test sync once with approle
+      run: |
+        export VAULT_ADDR='http://127.0.0.1:8200'
+        vault kv put secret/src/testsecret2 foo2=bar2
+        source ./vault-sync-app-role.env
+        cargo run -- --config vault-sync.yaml --once
+        vault kv read secret/dst/testsecret2
+
