@@ -17,7 +17,6 @@ jobs:
 
       - name: Set Docker Tag
         id: tag
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: |
           if [[ $GITHUB_REF == refs/heads/main ]]; then
             DOCKER_TAG="main"
@@ -27,7 +26,6 @@ jobs:
           echo ::set-output name=tag::${DOCKER_TAG}
 
       - name: Build Docker Image
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: docker build -t pbchekin/vault-sync:${{ steps.tag.outputs.tag }} -f docker/Dockerfile .
 
       - name: Login to Docker Hub
