@@ -17,7 +17,7 @@ mod sync;
 mod vault;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed)?;
+    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)?;
 
     let matches = App::new("vault-sync")
         .author(crate_authors!())
