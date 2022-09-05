@@ -14,7 +14,63 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
     - name: Build
       run: cargo build --verbose
+
     - name: Run tests
       run: cargo test --verbose
+
+    - name: Install Vault
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y gpg
+        wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null
+        gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt-get update -y
+        sudo apt-get install -y vault
+
+    - name: Run Vault in background
+      run: |
+        vault server -dev -dev-root-token-id=unsafe-root-token &
+        export VAULT_ADDR='http://127.0.0.1:8200'
+
+        # Make sure Vault is running
+        while ! vault token lookup; do sleep 1; done
+
+        # Enable AppRole auth method
+        vault auth enable approle
+
+        # Create reader policy
+        cat <<EOF | vault policy write vault-sync-reader -
+          path "secret/data/*" {
+            capabilities = ["read", "list"]
+          }
+          path "secret/metadata/*" {
+            capabilities = ["read", "list"]
+          }
+        EOF
+
+        # Create writer policy
+        cat <<EOF | vault policy write vault-sync-writer -
+          path "secret/data/*" {
+            capabilities = ["create", "read", "update", "delete"]
+          }
+        EOF
+
+        # Create new AppRoles
+        vault write auth/approle/role/vault-sync-reader token_policies=vault-sync-reader
+        vault write auth/approle/role/vault-sync-writer token_policies=vault-sync-writer
+
+        cat <<EOF > ./vault-sync-token.env
+        export VAULT_SYNC_SRC_TOKEN=unsafe-root-token
+        export VAULT_SYNC_DST_TOKEN=unsafe-root-token
+        EOF
+
+        cat <<EOF > ./vault-sync-app-role.env
+        export VAULT_SYNC_SRC_ROLE_ID=$(vault read auth/approle/role/vault-sync-reader/role-id -format=json | jq -r .data.role_id)
+        export VAULT_SYNC_SRC_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-reader/secret-id -format=json | jq -r .data.secret_id)
+        export VAULT_SYNC_DST_ROLE_ID=$(vault read auth/approle/role/vault-sync-writer/role-id -format=json | jq -r .data.role_id)
+        export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
+        EOF
