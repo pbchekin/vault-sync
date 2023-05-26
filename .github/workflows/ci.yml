@@ -4,6 +4,7 @@ on: push
 
 env:
   CARGO_TERM_COLOR: always
+  VAULT_ADDR: http://127.0.0.1:8200
 
 jobs:
   build:
@@ -32,15 +33,16 @@ jobs:
     - name: Run Vault in background
       run: |
         vault server -dev -dev-root-token-id=unsafe-root-token &
-        export VAULT_ADDR='http://127.0.0.1:8200'
-
         # Make sure Vault is running
+        sleep 1
         while ! vault token lookup; do sleep 1; done
 
-        # Enable AppRole auth method
+    - name: Enable AppRole auth method
+      run: |
         vault auth enable approle
 
-        # Create reader policy
+    - name: Create Vault policy for reader
+      run: |
         cat <<EOF | vault policy write vault-sync-reader -
           path "secret/data/*" {
             capabilities = ["read", "list"]
@@ -50,22 +52,28 @@ jobs:
           }
         EOF
 
-        # Create writer policy
+    - name: Create Vault policy for write
+      run: |
         cat <<EOF | vault policy write vault-sync-writer -
           path "secret/data/*" {
             capabilities = ["create", "read", "update", "delete"]
           }
         EOF
 
-        # Create new AppRoles
+    - name: Create Vault AppRoles for reader and writer
+      run: |
         vault write auth/approle/role/vault-sync-reader token_policies=vault-sync-reader
         vault write auth/approle/role/vault-sync-writer token_policies=vault-sync-writer
 
+    - name: Prepare environments variables for token authentication
+      run: |
         cat <<EOF > ./vault-sync-token.env
         export VAULT_SYNC_SRC_TOKEN=unsafe-root-token
         export VAULT_SYNC_DST_TOKEN=unsafe-root-token
         EOF
 
+    - name: Prepare environments variables for approle authentication
+      run: |
         cat <<EOF > ./vault-sync-app-role.env
         export VAULT_SYNC_SRC_ROLE_ID=$(vault read auth/approle/role/vault-sync-reader/role-id -format=json | jq -r .data.role_id)
         export VAULT_SYNC_SRC_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-reader/secret-id -format=json | jq -r .data.secret_id)
@@ -73,6 +81,8 @@ jobs:
         export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
         EOF
 
+    - name: Create configuration file for vault-sync
+      run: |
         cat <<EOF > ./vault-sync.yaml
         id: vault-sync
         full_sync_interval: 10
@@ -86,7 +96,6 @@ jobs:
 
     - name: Test sync once with token
       run: |
-        export VAULT_ADDR='http://127.0.0.1:8200'
         vault kv put secret/src/testsecret1 foo1=bar1
         source ./vault-sync-token.env
         cargo run -- --config vault-sync.yaml --once
@@ -94,9 +103,7 @@ jobs:
 
     - name: Test sync once with approle
       run: |
-        export VAULT_ADDR='http://127.0.0.1:8200'
         vault kv put secret/src/testsecret2 foo2=bar2
         source ./vault-sync-app-role.env
         cargo run -- --config vault-sync.yaml --once
         vault kv get secret/dst/testsecret2
-
