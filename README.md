@@ -20,8 +20,7 @@ You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the co
 
 * Only two Vault auth methods are supported: [Token](https://www.vaultproject.io/docs/auth/token) and [AppRole](https://www.vaultproject.io/docs/auth/approle)
 * Only secrets are replicated (specifically their latest versions)
-* Only secrets from the default secrets mount path `secret` are supported for the source and destination Vaults (this is due the limitation of the Vault client library)
-* Deleting secrets is not supported (also due to the limitation of the Vault client library, which does not support deleting secret's metadata)
+* Deleting secrets is not supported (due to the limitation of the Vault client library, which does not support deleting secret's metadata)
 
 ## Configuration
 
@@ -51,6 +50,8 @@ path "secret/metadata/*" {
 }
 EOF
 ```
+
+If the secrets engine mounted to a custom path instead of "secret", then replace "secret" above with the custom path.
 
 To create a token for vault-sync for the source Vault:
 
@@ -105,6 +106,8 @@ path "secret/data/*" {
 EOF
 ```
 
+If the secrets engine mounted to a custom path instead of "secret", then replace "secret" above with the custom path.
+
 To create a token for vault-sync for the source Vault:
 
 ```shell
@@ -148,7 +151,7 @@ cargo build --release
 Assuming your configuration file `vault-sync.yaml` is in the current directory: 
 
 ```shell
-docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.7.0 \
+docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.8.0 \
   vault-sync --config /vault-sync/vault-sync.yaml
 ```
 

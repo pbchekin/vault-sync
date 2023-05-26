@@ -34,14 +34,20 @@ pub struct VaultHost {
 pub struct VaultSource {
     #[serde(flatten)]
     pub host: VaultHost,
+    #[serde(default)]
     pub prefix: String,
+    #[serde(default = "default_backend")]
+    pub backend: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VaultDestination {
     #[serde(flatten)]
     pub host: VaultHost,
+    #[serde(default)]
     pub prefix: String,
+    #[serde(default = "default_backend")]
+    pub backend: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -109,4 +115,8 @@ fn sanitize<S>(_: &str, s: S) -> Result<S::Ok, S::Error>
         S: Serializer,
 {
     s.serialize_str("***")
+}
+
+fn default_backend() -> String {
+    "secret".to_string()
 }

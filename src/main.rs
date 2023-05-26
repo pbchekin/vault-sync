@@ -47,13 +47,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     info!("Connecting to {}", &config.src.host.url);
-    let src_client = vault_client(&config.src.host)?;
+    let mut src_client = vault_client(&config.src.host)?;
+    src_client.secret_backend(&config.src.backend);
     info!("Audit device vault-sync exists: {}", sync::audit_device_exists(&config.id, &src_client));
     let shared_src_client = Arc::new(Mutex::new(src_client));
     let src_token = token_worker(&config.src.host, shared_src_client.clone());
 
     info!("Connecting to {}", &config.dst.host.url);
-    let dst_client = vault_client(&config.dst.host)?;
+    let mut dst_client = vault_client(&config.dst.host)?;
+    dst_client.secret_backend(&config.dst.backend);
     let shared_dst_client = Arc::new(Mutex::new(dst_client));
     let dst_token = token_worker(&config.dst.host, shared_dst_client.clone());
 

@@ -334,6 +334,14 @@ mod tests {
     }
 
     #[test]
+    fn test_custom_path_matches() {
+        let path = "custom/data/path/to/secret";
+        let path = secret_path(&path).unwrap();
+        assert_eq!(path.0, "custom");
+        assert_eq!(path.1, "path/to/secret");
+    }
+
+    #[test]
     fn test_secret_path_not_matches() {
         let path = "secret/metadata/path/to/secret";
         let path = secret_path(&path);
