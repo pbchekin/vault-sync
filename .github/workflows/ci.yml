@@ -41,6 +41,16 @@ jobs:
       run: |
         vault auth enable approle
 
+    - name: Enable secrets engine at the custom path
+      run: |
+        vault secrets enable -path=secret2 kv-v2
+
+    - name: Make sure both standard and custom secrets engine are present
+      run: |
+        vault secrets list
+        vault secrets list | grep -qE '^secret/\s+kv'
+        vault secrets list | grep -qE '^secret2/\s+kv'
+
     - name: Create Vault policy for reader
       run: |
         cat <<EOF | vault policy write vault-sync-reader -
@@ -50,12 +60,21 @@ jobs:
           path "secret/metadata/*" {
             capabilities = ["read", "list"]
           }
+          path "secret2/data/*" {
+            capabilities = ["read", "list"]
+          }
+          path "secret2/metadata/*" {
+            capabilities = ["read", "list"]
+          }
         EOF
 
-    - name: Create Vault policy for write
+    - name: Create Vault policy for writer
       run: |
         cat <<EOF | vault policy write vault-sync-writer -
           path "secret/data/*" {
+            capabilities = ["create", "read", "update", "delete"]
+          }
+          path "secret2/data/*" {
             capabilities = ["create", "read", "update", "delete"]
           }
         EOF
@@ -107,3 +126,32 @@ jobs:
         source ./vault-sync-app-role.env
         cargo run -- --config vault-sync.yaml --once
         vault kv get secret/dst/testsecret2
+
+    - name: Create configuration file for vault-sync (custom secrets engine)
+      run: |
+        cat <<EOF > ./vault-sync.yaml
+        id: vault-sync
+        full_sync_interval: 10
+        src:
+          url: http://127.0.0.1:8200/
+          prefix: src
+          backend: secret2
+        dst:
+          url: http://127.0.0.1:8200/
+          prefix: dst
+          backend: secret2
+        EOF
+
+    - name: Test sync once with token
+      run: |
+        vault kv put -mount secret2 src/testsecret1 foo1=bar1
+        source ./vault-sync-token.env
+        cargo run -- --config vault-sync.yaml --once
+        vault kv get -mount secret2 dst/testsecret1
+
+    - name: Test sync once with approle
+      run: |
+        vault kv put -mount secret2 src/testsecret2 foo2=bar2
+        source ./vault-sync-app-role.env
+        cargo run -- --config vault-sync.yaml --once
+        vault kv get -mount secret dst/testsecret2
