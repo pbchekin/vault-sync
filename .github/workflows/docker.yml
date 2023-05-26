@@ -11,7 +11,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -23,7 +23,7 @@ jobs:
           else
             DOCKER_TAG="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)"
           fi
-          echo ::set-output name=tag::${DOCKER_TAG}
+          echo "tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
 
       - name: Build Docker Image
         run: docker build -t pbchekin/vault-sync:${{ steps.tag.outputs.tag }} -f docker/Dockerfile .
