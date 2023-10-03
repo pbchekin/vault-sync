@@ -30,6 +30,9 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y vault
 
+    - name: Run local test
+      run: ./scripts/test.sh
+
     - name: Run Vault in background
       run: |
         vault server -dev -dev-root-token-id=unsafe-root-token &
