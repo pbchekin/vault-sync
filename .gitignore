@@ -1,3 +1,5 @@
 /target
 /.idea
 vault-sync.yaml
+vault*.log
+vault*.pid
