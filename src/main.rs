@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
 
     let log_sync = if let Some(bind) = &config.bind {
-        Some(log_sync_worker(bind, &config.src.prefix, tx.clone())?)
+        Some(log_sync_worker(bind, &config.src.prefix, &config.src.backend, tx.clone())?)
     } else {
         None
     };
@@ -49,7 +49,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Connecting to {}", &config.src.host.url);
     let mut src_client = vault_client(&config.src.host)?;
     src_client.secret_backend(&config.src.backend);
-    info!("Audit device vault-sync exists: {}", sync::audit_device_exists(&config.id, &src_client));
+    info!(
+        "Audit device {} exists: {}",
+        &config.id,
+        sync::audit_device_exists(&config.id, &src_client),
+    );
     let shared_src_client = Arc::new(Mutex::new(src_client));
     let src_token = token_worker(&config.src.host, shared_src_client.clone());
 
@@ -140,8 +144,9 @@ fn sync_worker(
     })
 }
 
-fn log_sync_worker(addr: &str, prefix: &str, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
+fn log_sync_worker(addr: &str, prefix: &str, backend: &str, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
     let prefix = prefix.to_string();
+    let backend = backend.to_string();
     info!("Listening on {}", addr);
     let listener = TcpListener::bind(addr)?;
     let handle = thread::spawn(move || {
@@ -149,8 +154,9 @@ fn log_sync_worker(addr: &str, prefix: &str, tx: mpsc::Sender<sync::SecretOp>) -
             if let Ok(stream) = stream {
                 let tx = tx.clone();
                 let prefix = prefix.clone();
+                let backend = backend.clone();
                 thread::spawn(move || {
-                    sync::log_sync(&prefix, stream, tx);
+                    sync::log_sync(&prefix, &backend, stream, tx);
                 });
             }
         }

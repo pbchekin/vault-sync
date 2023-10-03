@@ -112,7 +112,7 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
     let _ = tx.send(SecretOp::FullSyncFinished);
 }
 
-pub fn log_sync(prefix: &str, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
+pub fn log_sync(prefix: &str, backend: &str, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
     match stream.peer_addr() {
         Ok(peer_addr) => {
             info!("New connection from {}", peer_addr);
@@ -134,7 +134,7 @@ pub fn log_sync(prefix: &str, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
                 let audit_log: Result<audit::AuditLog, _> = serde_json::from_str(&line);
                 match audit_log {
                     Ok(audit_log) => {
-                        if let Some(op) = audit_log_op("secret", prefix, &audit_log) {
+                        if let Some(op) = audit_log_op(backend, prefix, &audit_log) {
                             if let Err(error) = tx.send(op) {
                                 warn!("Failed to send a secret to a sync thread: {}", error);
                             }
