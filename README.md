@@ -92,7 +92,7 @@ vault audit enable -path vault-sync socket socket_type=tcp address=vault-sync:82
 
 The device name is `vault-sync`, use the same value as specified for `id` in the configuration file.
 For `address`, specify the external endpoint for vault-sync.
-It must be accessible from the Source Vault using this endpoint.
+Note that vault-sync should be running and accessible via the specified address, otherwise Vault will not create the audit device.
 
 ### Destination Vault
 
