@@ -71,7 +71,7 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
 
     'outer: while stack.len() > 0 {
         let len = stack.len();
-        let mut item = stack.get_mut(len - 1).unwrap();
+        let item = stack.get_mut(len - 1).unwrap();
         if item.secrets.is_none() {
             let secrets = {
                 let client = client.lock().unwrap();
