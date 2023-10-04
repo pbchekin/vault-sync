@@ -256,7 +256,10 @@ fn audit_log_op(mount: &str, prefix: &str, log: &audit::AuditLog) -> Option<Secr
     if log.log_type != "response" {
         return None;
     }
-    if log.request.mount_type != "kv" {
+    if log.request.mount_type.is_none() {
+        return None;
+    }
+    if log.request.mount_type != Some("kv".to_string()) {
         return None;
     }
 

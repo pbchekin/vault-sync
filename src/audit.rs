@@ -11,7 +11,7 @@ pub struct AuditLog {
 #[derive(Deserialize, Debug)]
 pub struct Request {
     pub operation: String,
-    pub mount_type: String,
+    pub mount_type: Option<String>,
     pub path: String,
 }
 
