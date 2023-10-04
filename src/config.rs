@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::fs::File;
 
 use serde::{Deserialize, Serialize, Serializer};
+use serde_repr::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -21,13 +22,11 @@ pub enum VaultAuthMethod {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EngineVersion(u64);
-
-impl Default for EngineVersion {
-    fn default() -> Self {
-        EngineVersion(2)
-    }
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Clone, Debug)]
+#[repr(u8)]
+pub enum EngineVersion {
+    V1 = 1,
+    V2 = 2,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -75,6 +74,12 @@ pub struct VaultSyncConfig {
 #[derive(Debug, Clone)]
 pub enum ConfigError {
     AuthRequired,
+}
+
+impl Default for EngineVersion {
+    fn default() -> Self {
+        EngineVersion::V2
+    }
 }
 
 impl VaultSyncConfig {
@@ -132,4 +137,33 @@ fn sanitize<S>(_: &str, s: S) -> Result<S::Ok, S::Error>
 
 fn default_backend() -> String {
     "secret".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::{EngineVersion, VaultSyncConfig};
+
+    #[test]
+    fn test_load() {
+        let yaml = r#"
+            id: vault-sync-id
+            full_sync_interval: 60
+            bind: 0.0.0.0:8202
+            src:
+              url: http://127.0.0.1:8200/
+              prefix: src
+            dst:
+              url: http://127.0.0.1:8200/
+              prefix: dst
+              backend: custom
+              version: 1
+        "#;
+        let config: VaultSyncConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.id, "vault-sync-id");
+        assert_eq!(config.bind, Some("0.0.0.0:8202".to_string()));
+        assert_eq!(config.src.backend, "secret");
+        assert_eq!(config.dst.backend, "custom");
+        assert_eq!(config.src.version, EngineVersion::V2);
+        assert_eq!(config.dst.version, EngineVersion::V1);
+    }
 }
