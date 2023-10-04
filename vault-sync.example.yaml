@@ -25,6 +25,9 @@ src:
   # Path for the secrets engine, default is "secret".
   # backend: secret
 
+  # Secrets engine version, default is 2.
+  # version: 2
+
   # Vault Token auth method
   # Set token (or environment variable VAULT_SYNC_SRC_TOKEN)
   # token: ***
@@ -49,6 +52,9 @@ dst:
 
   # Path for the secrets engine, default is "secret".
   # backend: secret
+
+  # Secrets engine version, default is 2.
+  # version: 2
 
   # Vault Token auth method
   # Set token (or environment variable VAULT_SYNC_DST_TOKEN)
