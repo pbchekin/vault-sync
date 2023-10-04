@@ -22,6 +22,15 @@ pub enum VaultAuthMethod {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EngineVersion(u64);
+
+impl Default for EngineVersion {
+    fn default() -> Self {
+        EngineVersion(2)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultHost {
     pub url: String,
     #[serde(flatten)]
@@ -38,6 +47,8 @@ pub struct VaultSource {
     pub prefix: String,
     #[serde(default = "default_backend")]
     pub backend: String,
+    #[serde(default)]
+    pub version: EngineVersion,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -48,6 +59,8 @@ pub struct VaultDestination {
     pub prefix: String,
     #[serde(default = "default_backend")]
     pub backend: String,
+    #[serde(default)]
+    pub version: EngineVersion,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
