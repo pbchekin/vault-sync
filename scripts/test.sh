@@ -4,7 +4,7 @@
 # Requires installed vault.
 # TODO: use vault container instead of locally installed vault.
 
-set -e
+set -e -o pipefail
 
 vault server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
 echo $! > vault.pid
@@ -12,7 +12,7 @@ echo $! > vault.pid
 function cleanup() {(
   set -e
   if [[ -f vault.pid ]]; then
-    kill $(<vault.pid)  || true
+    kill $(<vault.pid) || true
     rm -f vault.pid
   fi
   if [[ -f vault-sync.pid ]]; then
@@ -46,7 +46,7 @@ vault secrets list | grep -qE '^secret2/\s+kv'
 
 # Create reader policy
 cat <<EOF | vault policy write vault-sync-reader -
-  # Default secret backend "secret"
+  # Default secret backend "secret" (kv version 2)
   path "secret/data/*" {
     capabilities = ["read", "list"]
   }
@@ -54,15 +54,12 @@ cat <<EOF | vault policy write vault-sync-reader -
     capabilities = ["read", "list"]
   }
 
-  # Custom secret backend "secret1"
-  path "secret1/data/*" {
-    capabilities = ["read", "list"]
-  }
-  path "secret1/metadata/*" {
+  # Custom secret backend "secret1" (kv version 1)
+  path "secret1/*" {
     capabilities = ["read", "list"]
   }
 
-  # Custom secret backend "secret2"
+  # Custom secret backend "secret2" (kv version 2)
   path "secret2/data/*" {
     capabilities = ["read", "list"]
   }
@@ -73,17 +70,17 @@ EOF
 
 # Create writer policy
 cat <<EOF | vault policy write vault-sync-writer -
-  # Default secret backend "secret"
+  # Default secret backend "secret" (kv version 2)
   path "secret/data/*" {
     capabilities = ["create", "read", "update", "delete"]
   }
 
-  # Custom secret backend "secret1"
-  path "secret1/data/*" {
+  # Custom secret backend "secret1" (kv version 1)
+  path "secret1/*" {
     capabilities = ["create", "read", "update", "delete"]
   }
 
-  # Custom secret backend "secret2"
+  # Custom secret backend "secret2" (kv version 2)
   path "secret2/data/*" {
     capabilities = ["create", "read", "update", "delete"]
   }
@@ -105,83 +102,40 @@ export VAULT_SYNC_DST_ROLE_ID=$(vault read auth/approle/role/vault-sync-writer/r
 export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
 EOF
 
-# Create config for the default backend "secret" and prefixes "src" and "dst".
-cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync
-full_sync_interval: 10
-src:
-  url: http://127.0.0.1:8200/
-  prefix: src
-dst:
-  url: http://127.0.0.1:8200/
-  prefix: dst
-EOF
-
 function test_token() {(
-  local backend=$1
-  vault kv put -mount $backend src/test1-$backend foo=bar
-  vault kv get -mount $backend src/test1-$backend
+  local src_backend=$1
+  local dst_backend=${2:-$src_backend}
+  local secret_name=test-$RANDOM
+
+  vault kv put -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-token.env
   cargo run -- --config /tmp/vault-sync.yaml --once
-  vault kv get -mount $backend dst/test1-$backend
+  vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
+  vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
 
 function test_app_role() {(
-  local backend=$1
-  vault kv put -mount $backend src/test2-$backend foo=bar
-  vault kv get -mount $backend src/test2-$backend
+  local src_backend=$1
+  local dst_backend=${2:-$src_backend}
+  local secret_name=test-$RANDOM
+
+  vault kv put -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-app-role.env
   cargo run -- --config /tmp/vault-sync.yaml --once
-  vault kv get -mount $backend dst/test2-$backend
+  vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
+  vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
 
-test_token secret
-test_app_role secret
-
-# Create config for the custom backend "secret1" and prefixes "src" and "dst".
-cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync
-full_sync_interval: 10
-src:
-  url: http://127.0.0.1:8200/
-  prefix: src
-  backend: secret1
-dst:
-  url: http://127.0.0.1:8200/
-  prefix: dst
-  backend: secret1
-EOF
-
-#FIXME: not implemented
-#test_token secret1
-#test_app_role secret1
-
-# Create config for the custom backend "secret2" and prefixes "src" and "dst".
-cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync
-full_sync_interval: 10
-src:
-  url: http://127.0.0.1:8200/
-  prefix: src
-  backend: secret2
-dst:
-  url: http://127.0.0.1:8200/
-  prefix: dst
-  backend: secret2
-EOF
-
-test_token secret2
-test_app_role secret2
-
-# Testing Vault audit device
-
 function test_token_with_audit_device() {
-  local backend=$1
+  local src_backend=$1
+  local dst_backend=${2:-$src_backend}
+  local secret_name=test-$RANDOM
+
   source /tmp/vault-sync-token.env
 
-  vault kv put -mount $backend src/test3-$backend foo=bar
+  vault kv put -mount $src_backend ${src_prefix}${secret_name}-1 foo=bar
 
   cargo run -- --config /tmp/vault-sync.yaml &
   echo $! > vault-sync.pid
@@ -189,7 +143,8 @@ function test_token_with_audit_device() {
   echo Wating for vault-sync to start and make the initial sync ...
   VAULT_SYNC_READY=""
   for i in 1 2 3 4 5; do
-    if vault kv get -mount $backend dst/test3-$backend 2> /dev/null; then
+    if vault kv get -mount $dst_backend ${dst_prefix}${secret_name}-1 2> /dev/null; then
+      vault kv get -mount $dst_backend ${dst_prefix}${secret_name}-1 | grep -qE '^foo\s+bar$'
       VAULT_SYNC_READY="true"
       break
     fi
@@ -201,14 +156,15 @@ function test_token_with_audit_device() {
   fi
 
   # Enable audit device that sends log to vault-sync
-  vault audit enable -path vault-sync-$backend socket socket_type=tcp address=127.0.0.1:8202
+  vault audit enable -path vault-sync-$src_backend socket socket_type=tcp address=127.0.0.1:8202
 
-  vault kv put -mount $backend src/test4-$backend foo=bar
+  vault kv put -mount $src_backend ${dst_prefix}${secret_name}-2 foo=bar
 
   echo Wating for vault-sync to sync on event ...
   VAULT_SYNC_READY=""
   for i in 1 2 3 4 5; do
-    if vault kv get -mount $backend dst/test4-$backend 2> /dev/null; then
+    if vault kv get -mount $dst_backend ${dst_prefix}/${secret_name}-2 2> /dev/null; then
+      vault kv get -mount $dst_backend ${dst_prefix}/${secret_name}-2 | grep -qE '^foo\s+bar$'
       VAULT_SYNC_READY="true"
       break
     fi
@@ -219,14 +175,156 @@ function test_token_with_audit_device() {
     exit 1
   fi
 
+  vault audit disable vault-sync-$src_backend
+
   kill $(<vault-sync.pid)
   rm vault-sync.pid
 }
 
+# secret/src -> secret/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret
+test_app_role secret
+
+# secret1/src -> secret1/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+  backend: secret1
+  version: 1
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+  backend: secret1
+  version: 1
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret1
+test_app_role secret1
+
+# secret2/src -> secret2/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+  backend: secret2
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+  backend: secret2
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret2
+test_app_role secret2
+
+# secret1/src -> secret2/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+  backend: secret1
+  version: 1
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+  backend: secret2
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret1 secret2
+test_app_role secret1 secret2
+
+# secret2/src -> secret1/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+  backend: secret2
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+  backend: secret1
+  version: 1
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret2 secret1
+test_app_role secret2 secret1
+
+# secret1 -> secret2
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  backend: secret1
+  version: 1
+dst:
+  url: http://127.0.0.1:8200/
+  backend: secret2
+EOF
+
+src_prefix=""
+dst_prefix=""
+
+test_token secret1 secret2
+test_app_role secret1 secret2
+
+# secret2 -> secret1
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  backend: secret2
+dst:
+  url: http://127.0.0.1:8200/
+  backend: secret1
+  version: 1
+EOF
+
+src_prefix=""
+dst_prefix=""
+
+test_token secret2 secret1
+test_app_role secret2 secret1
+
 # Enable audit device that always works
 vault audit enable -path vault-audit file file_path=vault-audit.log
 
-# Create config for the default backend "secret" and prefixes "src" and "dst".
+# secret/src -> secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync-secret
 bind: 0.0.0.0:8202
@@ -239,9 +337,34 @@ dst:
   prefix: dst
 EOF
 
+src_prefix="src/"
+dst_prefix="dst/"
+
 test_token_with_audit_device secret
 
-# Create config for the custom backend "secret2" and prefixes "src" and "dst".
+# secret1/src -> secret1/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync-secret2
+full_sync_interval: 60
+bind: 0.0.0.0:8202
+src:
+  url: http://127.0.0.1:8200/
+  prefix: src
+  backend: secret1
+  version: 1
+dst:
+  url: http://127.0.0.1:8200/
+  prefix: dst
+  backend: secret1
+  version: 1
+EOF
+
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token_with_audit_device secret1
+
+# secret2/src -> secret2/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync-secret2
 full_sync_interval: 60
@@ -256,4 +379,45 @@ dst:
   backend: secret2
 EOF
 
+src_prefix="src/"
+dst_prefix="dst/"
+
 test_token_with_audit_device secret2
+
+# secret1 -> secret2
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync-secret1
+full_sync_interval: 60
+bind: 0.0.0.0:8202
+src:
+  url: http://127.0.0.1:8200/
+  backend: secret1
+  version: 1
+dst:
+  url: http://127.0.0.1:8200/
+  backend: secret2
+EOF
+
+src_prefix=""
+dst_prefix=""
+
+test_token_with_audit_device secret1 secret2
+
+# secret2 -> secret1
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync-secret2
+full_sync_interval: 60
+bind: 0.0.0.0:8202
+src:
+  url: http://127.0.0.1:8200/
+  backend: secret2
+dst:
+  url: http://127.0.0.1:8200/
+  backend: secret1
+  version: 1
+EOF
+
+src_prefix=""
+dst_prefix=""
+
+test_token_with_audit_device secret2 secret1

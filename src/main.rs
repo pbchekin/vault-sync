@@ -5,11 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 
 use clap::{crate_authors, crate_version, Arg, App};
+use hashicorp_vault::client::SecretsEngine;
 use log::{error, info};
 use simplelog::*;
 
 use config::{VaultHost, VaultSyncConfig};
 use vault::VaultClient;
+use crate::config::EngineVersion;
 
 mod audit;
 mod config;
@@ -41,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
 
     let log_sync = if let Some(bind) = &config.bind {
-        Some(log_sync_worker(bind, &config.src.prefix, &config.src.backend, tx.clone())?)
+        Some(log_sync_worker(bind, &config.src.prefix, &config.src.backend, &config.src.version, tx.clone())?)
     } else {
         None
     };
@@ -49,6 +51,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Connecting to {}", &config.src.host.url);
     let mut src_client = vault_client(&config.src.host)?;
     src_client.secret_backend(&config.src.backend);
+    src_client.secrets_engine(
+        match config.src.version {
+            EngineVersion::V1 => SecretsEngine::KVV1,
+            EngineVersion::V2 => SecretsEngine::KVV2,
+        }
+    );
     info!(
         "Audit device {} exists: {}",
         &config.id,
@@ -60,6 +68,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Connecting to {}", &config.dst.host.url);
     let mut dst_client = vault_client(&config.dst.host)?;
     dst_client.secret_backend(&config.dst.backend);
+    dst_client.secrets_engine(
+        match config.dst.version {
+            EngineVersion::V1 => SecretsEngine::KVV1,
+            EngineVersion::V2 => SecretsEngine::KVV2,
+        }
+    );
     let shared_dst_client = Arc::new(Mutex::new(dst_client));
     let dst_token = token_worker(&config.dst.host, shared_dst_client.clone());
 
@@ -144,9 +158,10 @@ fn sync_worker(
     })
 }
 
-fn log_sync_worker(addr: &str, prefix: &str, backend: &str, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
+fn log_sync_worker(addr: &str, prefix: &str, backend: &str, version: &EngineVersion, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
     let prefix = prefix.to_string();
     let backend = backend.to_string();
+    let version = version.clone();
     info!("Listening on {}", addr);
     let listener = TcpListener::bind(addr)?;
     let handle = thread::spawn(move || {
@@ -155,8 +170,9 @@ fn log_sync_worker(addr: &str, prefix: &str, backend: &str, tx: mpsc::Sender<syn
                 let tx = tx.clone();
                 let prefix = prefix.clone();
                 let backend = backend.clone();
+                let version = version.clone();
                 thread::spawn(move || {
-                    sync::log_sync(&prefix, &backend, stream, tx);
+                    sync::log_sync(&prefix, &backend, &version, stream, tx);
                 });
             }
         }

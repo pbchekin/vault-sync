@@ -9,6 +9,7 @@ use log::{debug, info, warn};
 use serde_json::Value;
 
 use crate::audit;
+use crate::config::EngineVersion;
 use crate::vault::VaultClient;
 
 pub fn audit_device_exists(name: &str, client: &VaultClient) -> bool {
@@ -112,7 +113,7 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
     let _ = tx.send(SecretOp::FullSyncFinished);
 }
 
-pub fn log_sync(prefix: &str, backend: &str, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
+pub fn log_sync(prefix: &str, backend: &str, version: &EngineVersion, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
     match stream.peer_addr() {
         Ok(peer_addr) => {
             info!("New connection from {}", peer_addr);
@@ -134,7 +135,7 @@ pub fn log_sync(prefix: &str, backend: &str, stream: TcpStream, tx: mpsc::Sender
                 let audit_log: Result<audit::AuditLog, _> = serde_json::from_str(&line);
                 match audit_log {
                     Ok(audit_log) => {
-                        if let Some(op) = audit_log_op(backend, prefix, &audit_log) {
+                        if let Some(op) = audit_log_op(backend, prefix, version, &audit_log) {
                             if let Err(error) = tx.send(op) {
                                 warn!("Failed to send a secret to a sync thread: {}", error);
                             }
@@ -252,7 +253,7 @@ pub fn sync_worker(
 
 
 // Convert AuditLog to SecretOp
-fn audit_log_op(mount: &str, prefix: &str, log: &audit::AuditLog) -> Option<SecretOp> {
+fn audit_log_op(mount: &str, prefix: &str, version: &EngineVersion, log: &audit::AuditLog) -> Option<SecretOp> {
     if log.log_type != "response" {
         return None;
     }
@@ -268,7 +269,10 @@ fn audit_log_op(mount: &str, prefix: &str, log: &audit::AuditLog) -> Option<Secr
         return None;
     }
 
-    let path = secret_path(&log.request.path.clone());
+    let path = match version {
+        EngineVersion::V1 => secret_path_v1(&log.request.path),
+        EngineVersion::V2 => secret_path_v2(&log.request.path),
+    };
     if let Some(path) = path {
         if path.0 != mount {
             return None;
@@ -287,15 +291,25 @@ fn audit_log_op(mount: &str, prefix: &str, log: &audit::AuditLog) -> Option<Secr
     None
 }
 
-// Convert Vault path to a secret path
+// Convert Vault path to a secret path for KV v1
+// Example: "secret/path/to/secret" -> "secret", "path/to/secret"
+fn secret_path_v1(path: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = path.split("/").collect();
+    if parts.len() < 2 {
+        return None
+    }
+    Some((parts[0].to_string(), parts[1..].join("/")))
+}
+
+// Convert Vault path to a secret path for KV v2
 // Example: "secret/data/path/to/secret" -> "secret", "path/to/secret"
-fn secret_path(path: &str) -> Option<(String, String)> {
+fn secret_path_v2(path: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = path.split("/").collect();
     if parts.len() < 3 {
         return None
     }
-    // FIXME `vault kv metadata delete secret/path` has `metadata` instead of `data`
-    // The Vault library does not support deleting metadata yet.
+    // `vault kv metadata delete secret/path` has `metadata` instead of `data`,
+    // we do not support this yet
     if parts[1] == "data" {
         Some((parts[0].to_string(), parts[2..].join("/")))
     } else {
@@ -326,28 +340,51 @@ fn secret_src_to_dst_path(src_prefix: &str, dst_prefix: &str, path: &str) -> Str
 
 #[cfg(test)]
 mod tests {
-    use crate::sync::{normalize_prefix, secret_path, secret_src_to_dst_path};
+    use crate::sync::{normalize_prefix, secret_path_v1, secret_path_v2, secret_src_to_dst_path};
 
     #[test]
-    fn test_secret_path_matches() {
-        let path = "secret/data/path/to/secret";
-        let path = secret_path(&path).unwrap();
+    fn test_secret_path_v1_matches() {
+        let path = "secret/path/to/secret";
+        let path = secret_path_v1(&path).unwrap();
         assert_eq!(path.0, "secret");
         assert_eq!(path.1, "path/to/secret");
     }
 
     #[test]
-    fn test_custom_path_matches() {
-        let path = "custom/data/path/to/secret";
-        let path = secret_path(&path).unwrap();
+    fn test_custom_secret_path_v1_matches() {
+        let path = "custom/path/to/secret";
+        let path = secret_path_v1(&path).unwrap();
         assert_eq!(path.0, "custom");
         assert_eq!(path.1, "path/to/secret");
     }
 
     #[test]
-    fn test_secret_path_not_matches() {
+    fn test_secret_path_v1_not_matches() {
+        let path = "secret";
+        let path = secret_path_v1(&path);
+        assert_eq!(path.is_none(), true);
+    }
+
+    #[test]
+    fn test_secret_path_v2_matches() {
+        let path = "secret/data/path/to/secret";
+        let path = secret_path_v2(&path).unwrap();
+        assert_eq!(path.0, "secret");
+        assert_eq!(path.1, "path/to/secret");
+    }
+
+    #[test]
+    fn test_custom_secret_path_v2_matches() {
+        let path = "custom/data/path/to/secret";
+        let path = secret_path_v2(&path).unwrap();
+        assert_eq!(path.0, "custom");
+        assert_eq!(path.1, "path/to/secret");
+    }
+
+    #[test]
+    fn test_secret_path_v2_not_matches() {
         let path = "secret/metadata/path/to/secret";
-        let path = secret_path(&path);
+        let path = secret_path_v2(&path);
         assert_eq!(path.is_none(), true);
     }
 
