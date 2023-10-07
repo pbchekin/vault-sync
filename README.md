@@ -20,7 +20,7 @@ You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the co
 
 * Only two Vault auth methods are supported: [Token](https://www.vaultproject.io/docs/auth/token) and [AppRole](https://www.vaultproject.io/docs/auth/approle)
 * Only secrets are replicated (specifically their latest versions)
-* Deleting secrets is not supported (due to the limitation of the Vault client library, which does not support deleting secret's metadata)
+* Deleting secrets is not supported
 
 ## Configuration
 
@@ -39,6 +39,18 @@ Instead of specifying secrets in the configuration file, you can use environment
 ### Source Vault
 
 A token or AppRole for the source Vault should have a policy that allows listing and reading secrets:
+
+For [KV secrets engine v1](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v1):
+
+```shell
+cat <<EOF | vault policy write vault-sync-src -
+path "secret/*" {
+  capabilities = ["read", "list"]
+}
+EOF
+```
+
+For [KV secrets engine v2](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v2):
 
 ```shell
 cat <<EOF | vault policy write vault-sync-src -
@@ -97,6 +109,18 @@ Note that vault-sync should be running and accessible via the specified address,
 ### Destination Vault
 
 A token or AppRole for the source Vault should have a policy that allows operations on secrets:
+
+For [KV secrets engine v1](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v1):
+
+```shell
+cat <<EOF | vault policy write vault-sync-dst -
+path "secret/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+EOF
+```
+
+For [KV secrets engine v2](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v2):
 
 ```shell
 cat <<EOF | vault policy write vault-sync-dst -
