@@ -37,10 +37,12 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /config
+          {{- if .Values.vaultSync.bind }}
           ports:
             - name: tcp
               containerPort: {{ (split ":" .Values.vaultSync.bind)._1 }}
               protocol: TCP
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:

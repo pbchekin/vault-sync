@@ -2,6 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# See https://github.com/pbchekin/vault-sync/blob/main/vault-sync.example.yaml
 vaultSync:
   id: vault-sync
   full_sync_interval: 3600
@@ -21,10 +22,10 @@ vaultSync:
 
 # Secrets must be base64 encoded
 secrets:
-  VAULT_SYNC_SRC_TOKEN: xxx
+  VAULT_SYNC_SRC_TOKEN: eHh4
 #  VAULT_SYNC_SRC_ROLE_ID: xxx
 #  VAULT_SYNC_SRC_SECRET_ID: xxx
-  VAULT_SYNC_DST_TOKEN: xxx
+  VAULT_SYNC_DST_TOKEN: eHh4
 #  VAULT_SYNC_DST_ROLE_ID: xxx
 #  VAULT_SYNC_DST_SECRET_ID: xxx
 
