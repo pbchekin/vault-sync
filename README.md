@@ -182,10 +182,8 @@ docker run -it -v $PWD:/vault-sync pbchekin/vault-sync:0.8.0 \
 ### Helm chart
 
 ```shell
-git clone https://github.com/pbchekin/vault-sync.git
-cd install/helm/vault-sync/
-kubectl create ns vault-sync
-kubens vault-sync
-# create myvalues.yaml, using values.yaml as the example
-helm install vault-sync -f myvalues.yaml .
+helm repo add vault-sync https://pbchekin.github.io/vault-sync
+helm search repo vault-sync
+# create myvalues.yaml, using install/helm/values.yaml as the example
+helm install vault-sync vault-sync/vault-sync -f myvalues.yaml
 ```
