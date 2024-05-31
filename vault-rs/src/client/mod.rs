@@ -1196,7 +1196,7 @@ where
     /// assert_eq!(thing.awesome, "I really am cool");
     /// assert_eq!(thing.thing, "this is also in the secret");
     /// ```
-    pub fn get_custom_secret<S: AsRef<str>, S2: DeserializeOwned + std::fmt::Debug>(
+    pub fn get_custom_secret<S: AsRef<str>, S2: DeserializeOwned + fmt::Debug>(
         &self,
         secret_name: S,
     ) -> Result<S2> {
