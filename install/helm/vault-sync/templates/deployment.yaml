@@ -37,6 +37,9 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /config
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if .Values.vaultSync.bind }}
           ports:
             - name: tcp
@@ -56,6 +59,9 @@ spec:
                   key: {{ $key }}
                   name: {{ $secretName }}
           {{- end }}
+          {{- with .Values.environmentVars }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -72,3 +78,6 @@ spec:
         - name: config-volume
           configMap:
             name: {{ include "vault-sync.fullname" . }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
