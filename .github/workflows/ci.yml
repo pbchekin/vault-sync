@@ -170,14 +170,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Build
-        run: cargo build --verbose
-
-      - name: Run tests
-        run: cargo test --verbose
-
       - name: Create Kubernetes cluster
         run: |
           cat <<EOF | kind create cluster --config=-
@@ -193,21 +185,44 @@ jobs:
           kubectl create ns vault
           helm repo add hashicorp https://helm.releases.hashicorp.com
           helm upgrade --install vault hashicorp/vault --namespace=vault --version=0.27.0 --set server.dev.enabled=true --set injector.enabled=false --set server.image.tag="1.16.1"
-          # wait for the pod
+
+      - name: Wait for Vault readiness
+        run: |
           for i in $(seq 1 10); do
-            if kubectl --namespace=vault get pods | grep -q vault-0; then
+            if kubectl --namespace=vault get pods | grep -q vault-0 2>/dev/null; then
               break
             fi
             sleep 1
           done
           kubectl --namespace=vault wait pod/vault-0 --for=condition=Ready --timeout=180s
 
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t pbchekin/vault-sync:$GITHUB_SHA -f docker/Dockerfile .
+
+      - name: Load Docker image to the cluster
+        run: |
+          kind load docker-image pbchekin/vault-sync:$GITHUB_SHA
+
+      - name: Deploy vault-sync
+        run: |
+          kubectl create ns vault-sync
+          cd install/helm/vault-sync/
+          helm install --namespace=vault-sync vault-sync -f - . <<EOF
+          image:
+            tag: $GITHUB_SHA
+          EOF
+
       - name: Wait for Vault readiness
         run: |
           for i in $(seq 1 10); do
-            if kubectl --namespace=vault get pods | grep -q vault-0; then
-              break
-            fi
+            kubectl --namespace=vault-sync get pods
             sleep 1
           done
-          kubectl --namespace=vault wait pod/vault-0 --for=condition=Ready --timeout=180s
+          kubectl --namespace=vault-sync wait pod -l app.kubernetes.io/instance=vault-sync --for=condition=Ready --timeout=180s
+
+      - name: Show vault-sync logs
+        run: |
+          kubectl --namespace=vault-sync logs -l app.kubernetes.io/instance=vault-sync
