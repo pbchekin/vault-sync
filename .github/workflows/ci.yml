@@ -193,4 +193,21 @@ jobs:
           kubectl create ns vault
           helm repo add hashicorp https://helm.releases.hashicorp.com
           helm upgrade --install vault hashicorp/vault --namespace=vault --version=0.27.0 --set server.dev.enabled=true --set injector.enabled=false --set server.image.tag="1.16.1"
-          kubectl wait pod/vault-0 --namespace=vault  --for=condition=Ready --timeout=180s
+          # wait for the pod
+          for i in $(seq 1 10); do
+            if kubectl --namespace=vault get pods | grep -q vault-0; then
+              break
+            fi
+            sleep 1
+          done
+          kubectl --namespace=vault wait pod/vault-0 --for=condition=Ready --timeout=180s
+
+      - name: Wait for Vault readiness
+        run: |
+          for i in $(seq 1 10); do
+            if kubectl --namespace=vault get pods | grep -q vault-0; then
+              break
+            fi
+            sleep 1
+          done
+          kubectl --namespace=vault wait pod/vault-0 --for=condition=Ready --timeout=180s
