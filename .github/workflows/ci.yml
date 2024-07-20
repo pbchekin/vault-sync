@@ -190,7 +190,7 @@ jobs:
         run: |
           kubectl --namespace=vault get service
           for i in $(seq 1 10); do
-            if kubectl --namespace=vault get pods | grep -q vault-0 2>/dev/null; then
+            if kubectl --namespace=vault get pods | grep -q vault-0 &>/dev/null; then
               break
             fi
             sleep 1
@@ -219,9 +219,9 @@ jobs:
             id: vault-sync
             full_sync_interval: 3600
             src:
-              url: http://vaul.vault.svc.cluster.local
+              url: http://vault.vault.svc.cluster.local:8200
             dst:
-              url: http://vaul.vault.svc.cluster.local
+              url: http://vault.vault.svc.cluster.local:8200
           # Secrets must be base64 encoded
           secrets:
             VAULT_SYNC_SRC_TOKEN: cm9vdA==
