@@ -16,11 +16,10 @@ env:
 
 jobs:
   build:
-    name: Build
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Build
       run: cargo build --verbose
@@ -166,3 +165,32 @@ jobs:
         source ./vault-sync-app-role.env
         cargo run -- --config vault-sync.yaml --once
         vault kv get -mount secret dst/testsecret2
+
+  kubernetes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Create Kubernetes cluster
+        run: |
+          cat <<EOF | kind create cluster --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            image: kindest/node:v1.29.4
+          EOF
+
+      - name: Deploy Vault
+        run: |
+          kubectl create ns vault
+          helm repo add hashicorp https://helm.releases.hashicorp.com
+          helm upgrade --install vault hashicorp/vault --namespace=vault --version=0.27.0 --set server.dev.enabled=true --set injector.enabled=false --set server.image.tag="1.16.1"
+          kubectl wait pod/vault-0 --namespace=vault  --for=condition=Ready --timeout=180s
