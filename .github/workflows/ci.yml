@@ -189,7 +189,7 @@ jobs:
       - name: Wait for Vault readiness
         run: |
           kubectl --namespace=vault get service
-          for i in $(seq 1 10); do
+          for i in $(seq 1 30); do
             if kubectl --namespace=vault get pods | grep -q vault-0 &>/dev/null; then
               break
             fi
@@ -228,10 +228,12 @@ jobs:
             VAULT_SYNC_DST_TOKEN: cm9vdA==
           EOF
 
-      - name: Wait for Vault readiness
+      - name: Wait for vault-sync readiness
         run: |
-          for i in $(seq 1 10); do
-            kubectl --namespace=vault-sync get pods
+          for i in $(seq 1 30); do
+            if kubectl --namespace=vault-sync get pods | grep -q vault-sync &>/dev/null; then
+              break
+            fi
             sleep 1
           done
           #kubectl --namespace=vault-sync wait pod -l app.kubernetes.io/instance=vault-sync --for=condition=Ready --timeout=180s
