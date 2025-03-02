@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct AuditLog {
+    #[allow(dead_code)]
     pub time: String,
     #[serde(rename = "type")]
     pub log_type: String,

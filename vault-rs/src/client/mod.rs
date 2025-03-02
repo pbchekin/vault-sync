@@ -17,7 +17,7 @@ use serde::de::{self, DeserializeOwned, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::TryInto;
-use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde_json;
 use std::time::Duration;
 use url::Url;
@@ -183,7 +183,7 @@ impl<'de> Deserialize<'de> for VaultNumUses {
 /// Used for vault responses that return seconds since unix epoch
 /// See: https://github.com/hashicorp/vault/issues/1654
 #[derive(Debug)]
-pub struct VaultNaiveDateTime(pub NaiveDateTime);
+pub struct VaultNaiveDateTime(pub DateTime<Utc>);
 struct VaultNaiveDateTimeVisitor;
 impl<'de> Visitor<'de> for VaultNaiveDateTimeVisitor {
     type Value = VaultNaiveDateTime;
@@ -196,7 +196,7 @@ impl<'de> Visitor<'de> for VaultNaiveDateTimeVisitor {
     where
         E: de::Error,
     {
-        let date_time = NaiveDateTime::from_timestamp_opt(value as i64, 0);
+        let date_time = DateTime::from_timestamp(value as i64, 0);
 
         match date_time {
             Some(dt) => Ok(VaultNaiveDateTime(dt)),
