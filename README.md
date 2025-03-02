@@ -192,7 +192,7 @@ helm install vault-sync vault-sync/vault-sync -f myvalues.yaml
 
 When running vault-sync locally, specify environment variable `SSL_CERT_FILE` pointing to a PEM file with a certificate or certificates (see https://docs.openssl.org/3.1/man7/openssl-env/).
 
-When running vault-sync in Kubernetes, first create a Kubernetes secret from the PRM file.
+When running vault-sync in Kubernetes, first create a Kubernetes secret from the PEM file.
 For example:
 
 ```shell
