@@ -187,3 +187,32 @@ helm search repo vault-sync
 # create myvalues.yaml, using install/helm/values.yaml as the example
 helm install vault-sync vault-sync/vault-sync -f myvalues.yaml
 ```
+
+### Custom CA certificates
+
+When running vault-sync locally, specify environment variable `SSL_CERT_FILE` pointing to a PEM file with a certificate or certificates (see https://docs.openssl.org/3.1/man7/openssl-env/).
+
+When running vault-sync in Kubernetes, first create a Kubernetes secret from the PRM file.
+For example:
+
+```shell
+kubectl --namespace=vault-sync create secret generic certs --from-file=ca-bundle.pem=/path/to/certificate.pem
+```
+
+Then specify the following Helm chart values:
+
+```yaml
+volumes:
+  - name: certs
+    secret:
+      secretName: certs
+
+volumeMounts:
+  - mountPath: /certs
+    name: certs
+    readOnly: true
+
+environmentVars:
+  - name: SSL_CERT_FILE
+    value: /certs/ca-bundle.pem
+```
