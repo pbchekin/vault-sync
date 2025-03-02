@@ -244,7 +244,11 @@ jobs:
             fi
             sleep 1
           done
-          kubectl --namespace=vault-sync wait pod -l app.kubernetes.io/instance=vault-sync --for=condition=Ready --timeout=180s
+          if ! kubectl --namespace=vault-sync wait pod -l app.kubernetes.io/instance=vault-sync --for=condition=Ready --timeout=180s; then
+            kubectl get pods -A
+            kubectl --namespace=vault-sync logs -l app.kubernetes.io/instance=vault-sync
+            exit 1
+          fi
 
       - name: Check sync result
         run: |
