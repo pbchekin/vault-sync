@@ -3,15 +3,16 @@ use std::error::Error;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::thread::JoinHandle;
 
 use clap::{crate_authors, crate_version, Arg, App};
 use hashicorp_vault::client::SecretsEngine;
 use log::{error, info};
 use simplelog::*;
 
-use config::{VaultHost, VaultSyncConfig};
+use config::{VaultHost, VaultSyncConfig, get_backends};
 use vault::VaultClient;
-use crate::config::EngineVersion;
+use crate::config::{Backend, EngineVersion};
 
 mod audit;
 mod config;
@@ -42,15 +43,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
 
-    let log_sync = if let Some(bind) = &config.bind {
-        Some(log_sync_worker(bind, &config.src.prefix, &config.src.backend, &config.src.version, tx.clone())?)
-    } else {
-        None
+    let mut log_sync: Option<JoinHandle<()>> = None;
+    if let Some(bind) = &config.bind {
+        let backends = get_backends(&config.src.backend);
+        let backend = backends.first().unwrap();
+        log_sync = Some(log_sync_worker(bind, &config.src.prefix, backend.as_str(), &config.src.version, tx.clone())?);
     };
 
     info!("Connecting to {}", &config.src.host.url);
     let mut src_client = vault_client(&config.src.host)?;
-    src_client.secret_backend(&config.src.backend);
+    let backends = get_backends(&config.src.backend);
+    let backend = backends.first().unwrap();
+    src_client.secret_backend(backend.as_str());
     src_client.secrets_engine(
         match config.src.version {
             EngineVersion::V1 => SecretsEngine::KVV1,
@@ -67,7 +71,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connecting to {}", &config.dst.host.url);
     let mut dst_client = vault_client(&config.dst.host)?;
-    dst_client.secret_backend(&config.dst.backend);
+    let backends = get_backends(&config.dst.backend);
+    let backend = backends.first().unwrap();
+    dst_client.secret_backend(backend.as_str());
     dst_client.secrets_engine(
         match config.dst.version {
             EngineVersion::V1 => SecretsEngine::KVV1,
