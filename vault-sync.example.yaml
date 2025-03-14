@@ -22,8 +22,13 @@ src:
   # the target Vault. Use empty string ("") for all secrets.
   prefix: ""
 
-  # Path for the secrets engine, default is "secret".
+  # Path for the secrets engine. For multiple backends use "backends" with a list.
+  # Default is single backend "secret".
   # backend: secret
+  #  or
+  # backends:
+  #   - secret1
+  #   - secret2
 
   # Secrets engine version, default is 2.
   # version: 2
@@ -50,8 +55,18 @@ dst:
   # synced to "dst/secret1".
   prefix: ""
 
-  # Path for the secrets engine, default is "secret".
+  # Path for the secrets engine. If "backend" or "backends" not specified for here, then the
+  # corresponding configuration for src will be used for dst. Note that currently only the following
+  # cases are supported:
+  # * one src backend to one dst backend
+  # * multiple src backends to the same number of dst backends
+  # Other cases (one to many, many to one, or different numbers of src and dst backends) are not
+  # currently supported.
   # backend: secret
+  #  or
+  # backends:
+  #   - secret1
+  #   - secret2
 
   # Secrets engine version, default is 2.
   # version: 2
