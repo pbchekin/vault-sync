@@ -31,18 +31,24 @@ while ! vault token lookup; do sleep 1; done
 # Enable AppRole auth method
 vault auth enable approle
 
-# Enable secrets engine v1 at the path "secret1"
 vault secrets enable -version=1 -path=secret1 kv
+vault secrets enable -version=1 -path=secret11 kv
+vault secrets enable -version=1 -path=secret12 kv
 
-# Enable secrets engine v2 at the path "secret2"
 vault secrets enable -version=2 -path=secret2 kv
+vault secrets enable -version=2 -path=secret21 kv
+vault secrets enable -version=2 -path=secret22 kv
 
 vault secrets list
 
 # Check all secret engines are enabled
 vault secrets list | grep -qE '^secret/\s+kv'
 vault secrets list | grep -qE '^secret1/\s+kv'
+vault secrets list | grep -qE '^secret11/\s+kv'
+vault secrets list | grep -qE '^secret12/\s+kv'
 vault secrets list | grep -qE '^secret2/\s+kv'
+vault secrets list | grep -qE '^secret21/\s+kv'
+vault secrets list | grep -qE '^secret22/\s+kv'
 
 # Create reader policy
 cat <<EOF | vault policy write vault-sync-reader -
@@ -132,6 +138,7 @@ function test_token_with_audit_device() {
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
+  local audit_device_name=vault-sync-$src_backend-$dst_backend
 
   source /tmp/vault-sync-token.env
 
@@ -156,7 +163,7 @@ function test_token_with_audit_device() {
   fi
 
   # Enable audit device that sends log to vault-sync
-  vault audit enable -path vault-sync-$src_backend socket socket_type=tcp address=127.0.0.1:8202
+  vault audit enable -path $audit_device_name socket socket_type=tcp address=127.0.0.1:8202
 
   vault kv put -mount $src_backend ${dst_prefix}${secret_name}-2 foo=bar
 
@@ -175,7 +182,7 @@ function test_token_with_audit_device() {
     exit 1
   fi
 
-  vault audit disable vault-sync-$src_backend
+  vault audit disable $audit_device_name
 
   kill $(<vault-sync.pid)
   rm vault-sync.pid
@@ -344,7 +351,7 @@ test_token_with_audit_device secret
 
 # secret1/src -> secret1/dst
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret2
+id: vault-sync-secret11
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -366,7 +373,7 @@ test_token_with_audit_device secret1
 
 # secret2/src -> secret2/dst
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret2
+id: vault-sync-secret22
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -386,7 +393,7 @@ test_token_with_audit_device secret2
 
 # secret1 -> secret2
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret1
+id: vault-sync-secret12
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -405,7 +412,7 @@ test_token_with_audit_device secret1 secret2
 
 # secret2 -> secret1
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret2
+id: vault-sync-secret21
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:

@@ -297,7 +297,8 @@ fn audit_log_op(mounts: &Vec<String>, prefix: &str, version: &EngineVersion, log
         EngineVersion::V2 => secret_path_v2(&log.request.path),
     };
     if let Some(path) = path {
-        if mounts.contains(&path.0) {
+        info!("mount: {}, mounts: {:?}", &path.0, mounts);
+        if !mounts.contains(&path.0) {
             return None;
         }
         if !path.1.starts_with(prefix) {
