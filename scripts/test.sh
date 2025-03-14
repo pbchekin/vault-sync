@@ -32,10 +32,9 @@ while ! vault token lookup; do sleep 1; done
 vault auth enable approle
 
 vault secrets enable -version=1 -path=secret1 kv
-vault secrets enable -version=1 -path=secret11 kv
-vault secrets enable -version=1 -path=secret12 kv
-
 vault secrets enable -version=2 -path=secret2 kv
+vault secrets enable -version=2 -path=secret11 kv
+vault secrets enable -version=2 -path=secret12 kv
 vault secrets enable -version=2 -path=secret21 kv
 vault secrets enable -version=2 -path=secret22 kv
 
@@ -44,9 +43,9 @@ vault secrets list
 # Check all secret engines are enabled
 vault secrets list | grep -qE '^secret/\s+kv'
 vault secrets list | grep -qE '^secret1/\s+kv'
+vault secrets list | grep -qE '^secret2/\s+kv'
 vault secrets list | grep -qE '^secret11/\s+kv'
 vault secrets list | grep -qE '^secret12/\s+kv'
-vault secrets list | grep -qE '^secret2/\s+kv'
 vault secrets list | grep -qE '^secret21/\s+kv'
 vault secrets list | grep -qE '^secret22/\s+kv'
 
@@ -108,7 +107,7 @@ export VAULT_SYNC_DST_ROLE_ID=$(vault read auth/approle/role/vault-sync-writer/r
 export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
 EOF
 
-function test_token() {(
+function test_token {(
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
@@ -121,7 +120,7 @@ function test_token() {(
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
 
-function test_app_role() {(
+function test_app_role {(
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
@@ -134,7 +133,7 @@ function test_app_role() {(
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
 
-function test_token_with_audit_device() {
+function test_token_with_audit_device {(
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
@@ -186,7 +185,69 @@ function test_token_with_audit_device() {
 
   kill $(<vault-sync.pid)
   rm vault-sync.pid
-}
+)}
+
+function test_multiple_backends {(
+  local secret_name=test-$RANDOM
+  local audit_device_name=vault-sync
+
+  source /tmp/vault-sync-token.env
+
+  vault kv put -mount secret11 ${secret_name}-1 foo=bar
+  vault kv put -mount secret12 ${secret_name}-1 foo=bar
+
+  cargo run -- --config /tmp/vault-sync.yaml &
+  echo $! > vault-sync.pid
+
+  echo Wating for vault-sync to start and make the initial sync ...
+  VAULT_SYNC_READY1=""
+  VAULT_SYNC_READY2=""
+  for i in 1 2 3 4 5; do
+    if vault kv get -mount secret21 ${secret_name}-1 &> /dev/null; then
+      vault  kv get -mount secret21 ${secret_name}-1 | grep -qE '^foo\s+bar$'
+      VAULT_SYNC_READY1="true"
+    fi
+    if vault kv get -mount secret22 ${secret_name}-1 &> /dev/null; then
+      vault  kv get -mount secret22 ${secret_name}-1 | grep -qE '^foo\s+bar$'
+      VAULT_SYNC_READY2="true"
+    fi
+    sleep 1
+  done
+  if [[ ! $VAULT_SYNC_READY1 || ! $VAULT_SYNC_READY1 ]]; then
+    echo "vault-sync failed to start with audit device"
+    exit 1
+  fi
+
+  # Enable audit device that sends log to vault-sync
+  vault audit enable -path $audit_device_name socket socket_type=tcp address=127.0.0.1:8202
+
+  vault kv put -mount secret11 ${secret_name}-2 foo=bar
+  vault kv put -mount secret12 ${secret_name}-2 foo=bar
+
+  echo Wating for vault-sync to sync on event ...
+  VAULT_SYNC_READY1=""
+  VAULT_SYNC_READY2=""
+  for i in 1 2 3 4 5; do
+    if vault kv get -mount secret21 ${secret_name}-2 &> /dev/null; then
+      vault  kv get -mount secret21 ${secret_name}-2 | grep -qE '^foo\s+bar$'
+      VAULT_SYNC_READY1="true"
+    fi
+    if vault kv get -mount secret22 ${secret_name}-2 &> /dev/null; then
+      vault  kv get -mount secret22 ${secret_name}-2 | grep -qE '^foo\s+bar$'
+      VAULT_SYNC_READY2="true"
+    fi
+    sleep 1
+  done
+  if [[ ! $VAULT_SYNC_READY1 || ! $VAULT_SYNC_READY2 ]]; then
+    echo "vault-sync failed to sync on the event from the audit device"
+    exit 1
+  fi
+
+  vault audit disable $audit_device_name
+
+  kill $(<vault-sync.pid)
+  rm vault-sync.pid
+)}
 
 # secret/src -> secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
@@ -351,7 +412,7 @@ test_token_with_audit_device secret
 
 # secret1/src -> secret1/dst
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret11
+id: vault-sync-secret
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -373,7 +434,7 @@ test_token_with_audit_device secret1
 
 # secret2/src -> secret2/dst
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret22
+id: vault-sync-secret
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -393,7 +454,7 @@ test_token_with_audit_device secret2
 
 # secret1 -> secret2
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret12
+id: vault-sync-secret
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -412,7 +473,7 @@ test_token_with_audit_device secret1 secret2
 
 # secret2 -> secret1
 cat <<EOF > /tmp/vault-sync.yaml
-id: vault-sync-secret21
+id: vault-sync-secret
 full_sync_interval: 60
 bind: 0.0.0.0:8202
 src:
@@ -428,3 +489,22 @@ src_prefix=""
 dst_prefix=""
 
 test_token_with_audit_device secret2 secret1
+
+# secret11, secret12 -> secret21, secret22
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync-secret
+full_sync_interval: 60
+bind: 0.0.0.0:8202
+src:
+  url: http://127.0.0.1:8200/
+  backends:
+    - secret11
+    - secret12
+dst:
+  url: http://127.0.0.1:8200/
+  backends:
+    - secret21
+    - secret22
+EOF
+
+test_multiple_backends
