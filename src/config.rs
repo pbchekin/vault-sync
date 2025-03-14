@@ -46,7 +46,7 @@ pub enum Backend {
     Backends(Vec<String>),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultSource {
     #[serde(flatten)]
     pub host: VaultHost,
@@ -58,7 +58,7 @@ pub struct VaultSource {
     pub version: EngineVersion,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultDestination {
     #[serde(flatten)]
     pub host: VaultHost,
@@ -70,7 +70,7 @@ pub struct VaultDestination {
     pub version: EngineVersion,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultSyncConfig {
     pub id: String,
     pub full_sync_interval: u64,
@@ -201,7 +201,7 @@ fn sanitize<S>(_: &str, s: S) -> Result<S::Ok, S::Error>
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use crate::config::{Backend, EngineVersion, VaultSyncConfig, get_backends, ConfigError};
+    use crate::config::{EngineVersion, VaultSyncConfig, get_backends, ConfigError};
 
     #[test]
     fn test_load() -> Result<(), Box<dyn Error>> {

@@ -3,29 +3,40 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hashicorp_vault::client as vault;
-use hashicorp_vault::client::{TokenData, VaultDuration};
+use hashicorp_vault::client::{SecretsEngine, TokenData, VaultDuration};
 use hashicorp_vault::client::error::Result as VaultResult;
 use log::{info, warn};
 
-use crate::config::{VaultAuthMethod, VaultHost};
+use crate::config::{EngineVersion, VaultAuthMethod, VaultHost};
 
 pub type VaultClient = hashicorp_vault::client::VaultClient<TokenData>;
 
-pub fn vault_client(host: &VaultHost) -> VaultResult<vault::VaultClient<TokenData>> {
-    match host.auth.as_ref().unwrap() {
+pub fn vault_client(host: &VaultHost, version: &EngineVersion) -> VaultResult<vault::VaultClient<TokenData>> {
+    let mut result = match host.auth.as_ref().unwrap() {
         VaultAuthMethod::TokenAuth { token } => {
-            vault::VaultClient::new(&host.url, token)
+            VaultClient::new(&host.url, token)
         },
         VaultAuthMethod::AppRoleAuth { role_id, secret_id} => {
             let client = vault::VaultClient::new_app_role(
                 &host.url, role_id, Some(secret_id))?;
-            vault::VaultClient::new(&host.url, client.token)
+            VaultClient::new(&host.url, client.token)
         }
+    };
+
+    if let Ok(client) = &mut result {
+        client.secrets_engine(
+            match version {
+                EngineVersion::V1 => SecretsEngine::KVV1,
+                EngineVersion::V2 => SecretsEngine::KVV2,
+            }
+        );
     }
+
+    result
 }
 
 // Worker to renew a Vault token lease, or to request a new token (for Vault AppRole auth method)
-pub fn token_worker(host: &VaultHost, client: Arc<Mutex<VaultClient>>) {
+pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>) {
     let mut token_age = time::Instant::now();
     loop {
         let info = {
@@ -98,7 +109,7 @@ pub fn token_worker(host: &VaultHost, client: Arc<Mutex<VaultClient>>) {
             if age > max_ttl / 2 {
                 if let Some(VaultAuthMethod::AppRoleAuth { role_id: _, secret_id: _ }) = &host.auth {
                     info!("Requesting a new token");
-                    match vault_client(&host) {
+                    match vault_client(&host, &version) {
                         Ok(new_client) => {
                             let mut client = client.lock().unwrap();
                             client.token = new_client.token;

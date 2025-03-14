@@ -1,4 +1,4 @@
-use std::{thread, time};
+use std::{thread};
 use std::error::Error;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
@@ -6,13 +6,12 @@ use std::sync::mpsc;
 use std::thread::JoinHandle;
 
 use clap::{crate_authors, crate_version, Arg, App};
-use hashicorp_vault::client::SecretsEngine;
 use log::{error, info};
 use simplelog::*;
 
-use config::{VaultHost, VaultSyncConfig, get_backends};
+use config::{VaultHost, VaultSyncConfig};
 use vault::VaultClient;
-use crate::config::{Backend, EngineVersion};
+use crate::config::{EngineVersion, get_backends};
 
 mod audit;
 mod config;
@@ -40,53 +39,32 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     let config = load_config(matches.value_of("config").unwrap())?;
-
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
 
-    let mut log_sync: Option<JoinHandle<()>> = None;
-    if let Some(bind) = &config.bind {
-        let backends = get_backends(&config.src.backend);
-        let backend = backends.first().unwrap();
-        log_sync = Some(log_sync_worker(bind, &config.src.prefix, backend.as_str(), &config.src.version, tx.clone())?);
+    let log_sync = match &config.bind {
+        Some(_) => Some(log_sync_worker(&config, tx.clone())?),
+        None => None,
     };
 
     info!("Connecting to {}", &config.src.host.url);
-    let mut src_client = vault_client(&config.src.host)?;
-    let backends = get_backends(&config.src.backend);
-    let backend = backends.first().unwrap();
-    src_client.secret_backend(backend.as_str());
-    src_client.secrets_engine(
-        match config.src.version {
-            EngineVersion::V1 => SecretsEngine::KVV1,
-            EngineVersion::V2 => SecretsEngine::KVV2,
-        }
-    );
+    let src_client = vault_client(&config.src.host, &config.src.version)?;
+    let shared_src_client = Arc::new(Mutex::new(src_client));
+    let src_token = token_worker(&config.src.host, &config.src.version, shared_src_client.clone());
+
+    info!("Connecting to {}", &config.dst.host.url);
+    let dst_client = vault_client(&config.dst.host, &config.dst.version)?;
+    let shared_dst_client = Arc::new(Mutex::new(dst_client));
+    let dst_token = token_worker(&config.dst.host, &config.dst.version,shared_dst_client.clone());
+
     info!(
         "Audit device {} exists: {}",
         &config.id,
-        sync::audit_device_exists(&config.id, &src_client),
+        sync::audit_device_exists(&config.id, shared_src_client.clone()),
     );
-    let shared_src_client = Arc::new(Mutex::new(src_client));
-    let src_token = token_worker(&config.src.host, shared_src_client.clone());
-
-    info!("Connecting to {}", &config.dst.host.url);
-    let mut dst_client = vault_client(&config.dst.host)?;
-    let backends = get_backends(&config.dst.backend);
-    let backend = backends.first().unwrap();
-    dst_client.secret_backend(backend.as_str());
-    dst_client.secrets_engine(
-        match config.dst.version {
-            EngineVersion::V1 => SecretsEngine::KVV1,
-            EngineVersion::V2 => SecretsEngine::KVV2,
-        }
-    );
-    let shared_dst_client = Arc::new(Mutex::new(dst_client));
-    let dst_token = token_worker(&config.dst.host, shared_dst_client.clone());
 
     let sync = sync_worker(
         rx,
-        &config.src.prefix,
-        &config.dst.prefix,
+        &config,
         shared_src_client.clone(),
         shared_dst_client.clone(),
         matches.is_present("dry-run"),
@@ -104,7 +82,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             join_handlers.push(log_sync.unwrap());
         }
     } else {
-        sync::full_sync(&config.src.prefix, shared_src_client.clone(), tx.clone());
+        let backends = get_backends(&config.src.backend);
+        sync::full_sync(&config.src.prefix, &backends, shared_src_client.clone(), tx.clone());
     };
 
     // Join all threads
@@ -128,8 +107,8 @@ fn load_config(file_name: &str) -> Result<VaultSyncConfig, Box<dyn Error>> {
     }
 }
 
-fn vault_client(host: &VaultHost) -> Result<VaultClient, Box<dyn Error>> {
-    match vault::vault_client(host) {
+fn vault_client(host: &VaultHost, version: &EngineVersion) -> Result<VaultClient, Box<dyn Error>> {
+    match vault::vault_client(host, version) {
         Ok(client) => {
             Ok(client)
         },
@@ -140,45 +119,41 @@ fn vault_client(host: &VaultHost) -> Result<VaultClient, Box<dyn Error>> {
     }
 }
 
-fn token_worker(host: &VaultHost, client: Arc<Mutex<VaultClient>>) -> thread::JoinHandle<()> {
+fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>) -> JoinHandle<()> {
     let host = host.clone();
+    let version = version.clone();
     thread::spawn(move || {
-        vault::token_worker(&host, client);
+        vault::token_worker(&host, &version, client);
     })
 }
 
 fn sync_worker(
     rx: mpsc::Receiver<sync::SecretOp>,
-    src_prefix: &str,
-    dst_prefix: &str,
+    config: &VaultSyncConfig,
     src_client: Arc<Mutex<VaultClient>>,
     dst_client: Arc<Mutex<VaultClient>>,
     dry_run: bool,
     run_once: bool,
 ) -> thread::JoinHandle<()> {
     info!("Dry run: {}", dry_run);
-    let src_prefix = src_prefix.to_string();
-    let dst_prefix = dst_prefix.to_string();
+    let config = config.clone();
     thread::spawn(move || {
-        sync::sync_worker(rx, &src_prefix, &dst_prefix, src_client, dst_client, dry_run, run_once);
+        sync::sync_worker(rx, &config, src_client, dst_client, dry_run, run_once);
     })
 }
 
-fn log_sync_worker(addr: &str, prefix: &str, backend: &str, version: &EngineVersion, tx: mpsc::Sender<sync::SecretOp>) -> Result<thread::JoinHandle<()>, std::io::Error> {
-    let prefix = prefix.to_string();
-    let backend = backend.to_string();
-    let version = version.clone();
+fn log_sync_worker(config: &VaultSyncConfig, tx: mpsc::Sender<sync::SecretOp>) -> Result<JoinHandle<()>, std::io::Error> {
+    let addr = &config.bind.clone().unwrap();
+    let config = config.clone();
     info!("Listening on {}", addr);
     let listener = TcpListener::bind(addr)?;
     let handle = thread::spawn(move || {
         for stream in listener.incoming() {
             if let Ok(stream) = stream {
                 let tx = tx.clone();
-                let prefix = prefix.clone();
-                let backend = backend.clone();
-                let version = version.clone();
+                let config = config.clone();
                 thread::spawn(move || {
-                    sync::log_sync(&prefix, &backend, &version, stream, tx);
+                    sync::log_sync(&config, stream, tx);
                 });
             }
         }
@@ -191,9 +166,8 @@ fn full_sync_worker(
     client: Arc<Mutex<VaultClient>>,
     tx: mpsc::Sender<sync::SecretOp>
 ) -> thread::JoinHandle<()>{
-    let interval = time::Duration::from_secs(config.full_sync_interval);
-    let prefix = config.src.prefix.clone();
+    let config = config.clone();
     thread::spawn(move || {
-        sync::full_sync_worker(&prefix, interval, client, tx);
+        sync::full_sync_worker(&config, client, tx);
     })
 }

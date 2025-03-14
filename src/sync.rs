@@ -1,4 +1,5 @@
 use std::{thread, time};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -9,10 +10,11 @@ use log::{debug, info, warn};
 use serde_json::Value;
 
 use crate::audit;
-use crate::config::EngineVersion;
+use crate::config::{EngineVersion, get_backends, VaultSyncConfig};
 use crate::vault::VaultClient;
 
-pub fn audit_device_exists(name: &str, client: &VaultClient) -> bool {
+pub fn audit_device_exists(name: &str, client: Arc<Mutex<VaultClient>>) -> bool {
+    let client = client.lock().unwrap();
     let name = format!("{}/", name);
     match client.call_endpoint::<Value>(HttpVerb::GET, "sys/audit", None, None) {
         Ok(response) => {
@@ -35,14 +37,16 @@ pub fn audit_device_exists(name: &str, client: &VaultClient) -> bool {
 }
 
 pub fn full_sync_worker(
-    prefix: &str,
-    interval: time::Duration,
+    config: &VaultSyncConfig,
     client: Arc<Mutex<VaultClient>>,
     tx: mpsc::Sender<SecretOp>
 ) {
     info!("FullSync worker started");
+    let interval = time::Duration::from_secs(config.full_sync_interval);
+    let prefix = &config.src.prefix;
+    let backends = get_backends(&config.src.backend);
     loop {
-        full_sync(prefix, client.clone(), tx.clone());
+        full_sync(prefix, &backends, client.clone(), tx.clone());
         thread::sleep(interval);
     }
 }
@@ -53,15 +57,17 @@ struct Item {
     index: usize,
 }
 
-pub fn full_sync(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
+pub fn full_sync(prefix: &str, backends: &Vec<String>, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
     let prefix= normalize_prefix(prefix);
     info!("FullSync started");
     let now = time::Instant::now();
-    full_sync_internal(&prefix, client, tx);
+    for backend in backends {
+        full_sync_internal(&prefix, backend, client.clone(), tx.clone());
+    }
     info!("FullSync finished in {}ms", now.elapsed().as_millis());
 }
 
-fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
+fn full_sync_internal(prefix: &str, backend: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::Sender<SecretOp>) {
     let mut stack: Vec<Item> = Vec::new();
     let item = Item {
         parent: prefix.to_string(),
@@ -75,7 +81,8 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
         let item = stack.get_mut(len - 1).unwrap();
         if item.secrets.is_none() {
             let secrets = {
-                let client = client.lock().unwrap();
+                let mut client = client.lock().unwrap();
+                client.secret_backend(backend);
                 client.list_secrets(&item.parent)
             };
             match secrets {
@@ -102,7 +109,8 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
                     continue 'outer;
                 } else {
                     let full_name = format!("{}{}", &item.parent, &secret);
-                    if let Err(error) = tx.send(SecretOp::Create(full_name)) {
+                    let op = SecretOp::Create(SecretPath {mount: backend.to_string(), path: full_name});
+                    if let Err(error) = tx.send(op) {
                         warn!("Failed to send a secret to a sync thread: {}", error);
                     }
                 }
@@ -113,7 +121,7 @@ fn full_sync_internal(prefix: &str, client: Arc<Mutex<VaultClient>>, tx: mpsc::S
     let _ = tx.send(SecretOp::FullSyncFinished);
 }
 
-pub fn log_sync(prefix: &str, backend: &str, version: &EngineVersion, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
+pub fn log_sync(config: &VaultSyncConfig, stream: TcpStream, tx: mpsc::Sender<SecretOp>) {
     match stream.peer_addr() {
         Ok(peer_addr) => {
             info!("New connection from {}", peer_addr);
@@ -122,6 +130,10 @@ pub fn log_sync(prefix: &str, backend: &str, version: &EngineVersion, stream: Tc
             info!("New connection");
         }
     }
+    let backends = get_backends(&config.src.backend);
+    let prefix = &config.src.prefix;
+    let version = &config.src.version;
+
     let mut reader = BufReader::new(stream);
     loop {
         let mut line = String::new();
@@ -135,7 +147,7 @@ pub fn log_sync(prefix: &str, backend: &str, version: &EngineVersion, stream: Tc
                 let audit_log: Result<audit::AuditLog, _> = serde_json::from_str(&line);
                 match audit_log {
                     Ok(audit_log) => {
-                        if let Some(op) = audit_log_op(backend, prefix, version, &audit_log) {
+                        if let Some(op) = audit_log_op(&backends, &prefix, &version, &audit_log) {
                             if let Err(error) = tx.send(op) {
                                 warn!("Failed to send a secret to a sync thread: {}", error);
                             }
@@ -155,12 +167,17 @@ pub fn log_sync(prefix: &str, backend: &str, version: &EngineVersion, stream: Tc
     debug!("Closed connection");
 }
 
+#[derive(Debug)]
+pub struct SecretPath{
+    mount: String,
+    path: String,
+}
 
 #[derive(Debug)]
 pub enum SecretOp {
-    Create(String),
-    Update(String),
-    Delete(String),
+    Create(SecretPath),
+    Update(SecretPath),
+    Delete(SecretPath),
     FullSyncFinished,
 }
 
@@ -181,29 +198,34 @@ impl SyncStats {
 
 pub fn sync_worker(
     rx: mpsc::Receiver<SecretOp>,
-    src_prefix: &str,
-    dst_prefix: &str,
+    config: &VaultSyncConfig,
     src_client: Arc<Mutex<VaultClient>>,
     dst_client: Arc<Mutex<VaultClient>>,
     dry_run: bool,
     run_once: bool,
 ) {
-    let src_prefix = normalize_prefix(src_prefix);
-    let dst_prefix = normalize_prefix(dst_prefix);
+    let src_prefix = normalize_prefix(&config.src.prefix);
+    let dst_prefix = normalize_prefix(&config.dst.prefix);
+    let src_mounts = get_backends(&config.src.backend);
+    let dst_mounts = get_backends(&config.dst.backend);
+    let mount_map: HashMap<&str, &str> = src_mounts.iter().map(|s| s.as_str()).zip(dst_mounts.iter().map(|s| s.as_str())).collect();
     info!("Sync worker started");
     let mut stats = SyncStats::new();
     loop {
         let op = rx.recv();
         if let Ok(op) = op {
             match op {
-                SecretOp::Update(src_path) | SecretOp::Create(src_path) => {
+                SecretOp::Update(path) | SecretOp::Create(path) => {
+                    let src_path = &path.path;
                     let dst_path = secret_src_to_dst_path(&src_prefix, &dst_prefix, &src_path);
                     let src_secret: Result<Value, _> = {
-                        let client = src_client.lock().unwrap();
+                        let mut client = src_client.lock().unwrap();
+                        client.secret_backend(&path.mount);
                         client.get_custom_secret(&src_path)
                     };
                     let dst_secret: Result<Value, _> = {
-                        let client = dst_client.lock().unwrap();
+                        let mut client = dst_client.lock().unwrap();
+                        client.secret_backend(mount_map[path.mount.as_str()]);
                         client.get_custom_secret(&dst_path)
                     };
                     if let Err(error) = src_secret {
@@ -229,12 +251,13 @@ pub fn sync_worker(
                         }
                     }
                 },
-                SecretOp::Delete(secret) => {
-                    let secret = secret_src_to_dst_path(&src_prefix, &dst_prefix, &secret);
+                SecretOp::Delete(path) => {
+                    let secret = secret_src_to_dst_path(&src_prefix, &dst_prefix, &path.path);
                     info!("Deleting secret {}", &secret);
                     if !dry_run {
-                        let client = dst_client.lock().unwrap();
-                        let _ = client.delete_secret(&secret);
+                        let mut client = dst_client.lock().unwrap();
+                        client.secret_backend(mount_map[path.mount.as_str()]);
+                        let _ = client.delete_secret(&path.path);
                     } else {
                         stats.deleted += 1;
                     }
@@ -253,7 +276,7 @@ pub fn sync_worker(
 
 
 // Convert AuditLog to SecretOp
-fn audit_log_op(mount: &str, prefix: &str, version: &EngineVersion, log: &audit::AuditLog) -> Option<SecretOp> {
+fn audit_log_op(mounts: &Vec<String>, prefix: &str, version: &EngineVersion, log: &audit::AuditLog) -> Option<SecretOp> {
     if log.log_type != "response" {
         return None;
     }
@@ -274,18 +297,18 @@ fn audit_log_op(mount: &str, prefix: &str, version: &EngineVersion, log: &audit:
         EngineVersion::V2 => secret_path_v2(&log.request.path),
     };
     if let Some(path) = path {
-        if path.0 != mount {
+        if mounts.contains(&path.0) {
             return None;
         }
         if !path.1.starts_with(prefix) {
             return None;
         }
         if operation == "create" {
-            return Some(SecretOp::Create(path.1));
+            return Some(SecretOp::Create(SecretPath {mount: path.0, path: path.1 }));
         } else if operation == "update" {
-            return Some(SecretOp::Update(path.1));
+            return Some(SecretOp::Update(SecretPath {mount: path.0, path: path.1 }));
         } else if operation == "delete" {
-            return Some(SecretOp::Delete(path.1));
+            return Some(SecretOp::Delete(SecretPath {mount: path.0, path: path.1 }));
         }
     }
     None
