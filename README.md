@@ -20,7 +20,6 @@ You need to specify different prefixes (`src.prefix` and `dst.prefix`) in the co
 
 * Only two Vault auth methods are supported: [Token](https://www.vaultproject.io/docs/auth/token) and [AppRole](https://www.vaultproject.io/docs/auth/approle)
 * Only secrets are replicated (specifically their latest versions)
-* Deleting secrets is not supported
 
 ## Configuration
 
