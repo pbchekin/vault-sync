@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   vault-sync:
   - apiVersion: v2
+    appVersion: 0.10.0
+    created: "2025-03-14T09:37:04.703282224-07:00"
+    description: A Helm chart for Kubernetes
+    digest: fa114558ba1cffd1c2c681f3ee01f5d0a7b2ea9fb40181958cd86873b646a7ad
+    name: vault-sync
+    type: application
+    urls:
+    - https://pbchekin.github.io/vault-sync/vault-sync-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
     appVersion: 0.9.2
     created: "2024-07-20T19:42:45.657280383-07:00"
     description: A Helm chart for Kubernetes
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://pbchekin.github.io/vault-sync/vault-sync-0.1.2.tgz
     version: 0.1.2
-generated: "2024-07-20T19:42:45.656748901-07:00"
+generated: "2025-03-14T09:37:04.702771926-07:00"
