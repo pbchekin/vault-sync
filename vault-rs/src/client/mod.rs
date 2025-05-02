@@ -674,20 +674,24 @@ pub enum EndpointResponse<D> {
 
 impl VaultClient<TokenData> {
     /// Construct a `VaultClient` from an existing vault token
-    pub fn new<U, T: Into<String>>(host: U, token: T,namespace: Option<String>) -> Result<VaultClient<TokenData>>
+    pub fn new<U, T: Into<String>>(host: U, token: T, namespace: Option<String>) -> Result<VaultClient<TokenData>>
     where
         U: TryInto<Url, Err = Error>,
     {
         let host = host.try_into()?;
         let client = Client::new();
         let token = token.into();
-        let res = handle_reqwest_response(
-            client
-                .get(host.join("/v1/auth/token/lookup-self")?)
-                .header("X-Vault-Token", token.clone())
-                .header("X-Vault-Namespace", namespace.clone().unwrap_or_default())
-                .send(),
-        )?;
+        let mut request = client
+            .get(host.join("/v1/auth/token/lookup-self")?)
+            .header("X-Vault-Token", token.clone());
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<TokenData> = parse_vault_response(res)?;
         Ok(VaultClient {
             host,
@@ -712,13 +716,17 @@ impl VaultClient<TokenData> {
         let host = host.try_into()?;
         let client = cli;
         let token = token.into();
-        let res = handle_reqwest_response(
-            client
-                .get(host.join("/v1/auth/token/lookup-self")?)
-                .header("X-Vault-Token", token.clone())
-                .header("X-Vault-Namespace", namespace.clone().unwrap_or_default())
-                .send(),
-        )?;
+        let mut request = client
+            .get(host.join("/v1/auth/token/lookup-self")?)
+            .header("X-Vault-Token", token.clone());
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<TokenData> = parse_vault_response(res)?;
         Ok(VaultClient {
             host,
@@ -753,13 +761,17 @@ impl VaultClient<()> {
             app_id: app_id.into(),
             user_id: user_id.into(),
         })?;
-        let res = handle_reqwest_response(
-            client
-                .post(host.join("/v1/auth/app-id/login")?)
-                .header("X-Vault-Namespace", namespace.clone().unwrap_or_default())
-                .body(payload)
-                .send(),
-        )?;
+        let mut request = client
+            .post(host.join("/v1/auth/app-id/login")?)
+            .body(payload);
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<()> = parse_vault_response(res)?;
         let token = match decoded.auth {
             Some(ref auth) => auth.client_token.clone(),
@@ -796,21 +808,22 @@ impl VaultClient<()> {
     {
         let host = host.try_into()?;
         let client = Client::new();
-        let secret_id = match secret_id {
-            Some(s) => Some(s.into()),
-            None => None,
-        };
+        let secret_id = secret_id.map(|s| s.into());
         let payload = serde_json::to_string(&AppRolePayload {
             role_id: role_id.into(),
             secret_id,
         })?;
-        let res = handle_reqwest_response(
-            client
-                .post(host.join("/v1/auth/approle/login")?)
-                .header("X-Vault-Namespace", namespace.clone().unwrap_or_default())
-                .body(payload)
-                .send(),
-        )?;
+        let mut request = client
+            .post(host.join("/v1/auth/approle/login")?)
+            .body(payload);
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<()> = parse_vault_response(res)?;
         let token = match decoded.auth {
             Some(ref auth) => auth.client_token.clone(),
