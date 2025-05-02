@@ -82,11 +82,14 @@ fn full_sync_internal(prefix: &str, backend: &str, client: Arc<Mutex<VaultClient
         if item.secrets.is_none() {
             let secrets = {
                 let mut client = client.lock().unwrap();
+                debug!("Switching to backend: {}", backend);
                 client.secret_backend(backend);
+                debug!("Listing secrets for parent: {}", &item.parent);
                 client.list_secrets(&item.parent)
             };
             match secrets {
                 Ok(secrets) => {
+                    debug!("Secrets found: {:?}", secrets);
                     item.secrets = Some(secrets);
                 },
                 Err(error) => {
@@ -100,7 +103,6 @@ fn full_sync_internal(prefix: &str, backend: &str, client: Arc<Mutex<VaultClient
                 item.index += 1;
                 if secret.ends_with("/") {
                     let item = Item {
-                        // item.parent ends with '/'
                         parent: format!("{}{}", &item.parent, secret),
                         secrets: None,
                         index: 0,
@@ -109,7 +111,7 @@ fn full_sync_internal(prefix: &str, backend: &str, client: Arc<Mutex<VaultClient
                     continue 'outer;
                 } else {
                     let full_name = format!("{}{}", &item.parent, &secret);
-                    let op = SecretOp::Create(SecretPath {mount: backend.to_string(), path: full_name});
+                    let op = SecretOp::Create(SecretPath { mount: backend.to_string(), path: full_name });
                     if let Err(error) = tx.send(op) {
                         warn!("Failed to send a secret to a sync thread: {}", error);
                     }

@@ -11,15 +11,15 @@ use crate::config::{EngineVersion, VaultAuthMethod, VaultHost};
 
 pub type VaultClient = hashicorp_vault::client::VaultClient<TokenData>;
 
-pub fn vault_client(host: &VaultHost, version: &EngineVersion) -> VaultResult<vault::VaultClient<TokenData>> {
+pub fn vault_client(host: &VaultHost, version: &EngineVersion,namespace: Option<String>) -> VaultResult<vault::VaultClient<TokenData>> {
     let mut result = match host.auth.as_ref().unwrap() {
         VaultAuthMethod::TokenAuth { token } => {
-            VaultClient::new(&host.url, token)
+            VaultClient::new(&host.url, token,namespace)
         },
         VaultAuthMethod::AppRoleAuth { role_id, secret_id} => {
             let client = vault::VaultClient::new_app_role(
-                &host.url, role_id, Some(secret_id))?;
-            VaultClient::new(&host.url, client.token)
+                &host.url, role_id, Some(secret_id),namespace.clone())?;
+            VaultClient::new(&host.url, client.token,namespace)
         }
     };
 
@@ -36,7 +36,7 @@ pub fn vault_client(host: &VaultHost, version: &EngineVersion) -> VaultResult<va
 }
 
 // Worker to renew a Vault token lease, or to request a new token (for Vault AppRole auth method)
-pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>) {
+pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>,namespace: Option<String>) {
     let mut token_age = time::Instant::now();
     loop {
         let info = {
@@ -109,7 +109,7 @@ pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex
             if age > max_ttl / 2 {
                 if let Some(VaultAuthMethod::AppRoleAuth { role_id: _, secret_id: _ }) = &host.auth {
                     info!("Requesting a new token");
-                    match vault_client(&host, &version) {
+                    match vault_client(&host, &version, namespace.clone()) {
                         Ok(new_client) => {
                             let mut client = client.lock().unwrap();
                             client.token = new_client.token;
