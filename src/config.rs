@@ -36,7 +36,6 @@ pub struct VaultHost {
     pub auth: Option<VaultAuthMethod>,
     pub token_ttl: Option<u64>,
     pub token_max_ttl: Option<u64>,
-    pub namespace: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
