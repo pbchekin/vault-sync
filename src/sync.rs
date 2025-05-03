@@ -82,14 +82,11 @@ fn full_sync_internal(prefix: &str, backend: &str, client: Arc<Mutex<VaultClient
         if item.secrets.is_none() {
             let secrets = {
                 let mut client = client.lock().unwrap();
-                debug!("Switching to backend: {}", backend);
                 client.secret_backend(backend);
-                debug!("Listing secrets for parent: {}", &item.parent);
                 client.list_secrets(&item.parent)
             };
             match secrets {
                 Ok(secrets) => {
-                    debug!("Secrets found: {:?}", secrets);
                     item.secrets = Some(secrets);
                 },
                 Err(error) => {

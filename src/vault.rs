@@ -11,15 +11,15 @@ use crate::config::{EngineVersion, VaultAuthMethod, VaultHost};
 
 pub type VaultClient = hashicorp_vault::client::VaultClient<TokenData>;
 
-pub fn vault_client(host: &VaultHost, version: &EngineVersion,namespace: Option<String>) -> VaultResult<vault::VaultClient<TokenData>> {
+pub fn vault_client(host: &VaultHost, version: &EngineVersion, namespace: Option<String>) -> VaultResult<vault::VaultClient<TokenData>> {
     let mut result = match host.auth.as_ref().unwrap() {
         VaultAuthMethod::TokenAuth { token } => {
-            VaultClient::new(&host.url, token,namespace)
+            VaultClient::new(&host.url, token, namespace)
         },
         VaultAuthMethod::AppRoleAuth { role_id, secret_id} => {
             let client = vault::VaultClient::new_app_role(
-                &host.url, role_id, Some(secret_id),namespace.clone())?;
-            VaultClient::new(&host.url, client.token,namespace)
+                &host.url, role_id, Some(secret_id), namespace.clone())?;
+            VaultClient::new(&host.url, client.token, namespace)
         }
     };
 
@@ -36,7 +36,7 @@ pub fn vault_client(host: &VaultHost, version: &EngineVersion,namespace: Option<
 }
 
 // Worker to renew a Vault token lease, or to request a new token (for Vault AppRole auth method)
-pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>,namespace: Option<String>) {
+pub fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<VaultClient>>, namespace: Option<String>) {
     let mut token_age = time::Instant::now();
     loop {
         let info = {

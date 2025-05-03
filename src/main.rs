@@ -48,12 +48,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Connecting to {}", &config.src.host.url);
     let src_client = vault_client(&config.src.host, &config.src.version, config.src.namespace.clone())?;
     let shared_src_client = Arc::new(Mutex::new(src_client));
-    let src_token = token_worker(&config.src.host, &config.src.version, shared_src_client.clone(),config.src.namespace.clone());
+    let src_token = token_worker(&config.src.host, &config.src.version, shared_src_client.clone(), config.src.namespace.clone());
 
     info!("Connecting to {}", &config.dst.host.url);
     let dst_client = vault_client(&config.dst.host, &config.dst.version, config.dst.namespace.clone())?;
     let shared_dst_client = Arc::new(Mutex::new(dst_client));
-    let dst_token = token_worker(&config.dst.host, &config.dst.version,shared_dst_client.clone(),config.dst.namespace.clone());
+    let dst_token = token_worker(&config.dst.host, &config.dst.version, shared_dst_client.clone(), config.dst.namespace.clone());
 
     info!(
         "Audit device {} exists: {}",
@@ -106,8 +106,8 @@ fn load_config(file_name: &str) -> Result<VaultSyncConfig, Box<dyn Error>> {
     }
 }
 
-fn vault_client(host: &VaultHost, version: &EngineVersion,namespace: Option<String>) -> Result<VaultClient, Box<dyn Error>> {
-    match vault::vault_client(host, version,namespace) {
+fn vault_client(host: &VaultHost, version: &EngineVersion, namespace: Option<String>) -> Result<VaultClient, Box<dyn Error>> {
+    match vault::vault_client(host, version, namespace) {
         Ok(client) => {
             Ok(client)
         },
@@ -122,7 +122,7 @@ fn token_worker(host: &VaultHost, version: &EngineVersion, client: Arc<Mutex<Vau
     let host = host.clone();
     let version = version.clone();
     thread::spawn(move || {
-        vault::token_worker(&host, &version, client,namespace.clone());
+        vault::token_worker(&host, &version, client, namespace.clone());
     })
 }
 

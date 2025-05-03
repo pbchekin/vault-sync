@@ -18,9 +18,13 @@ full_sync_interval: 3600 # 1h
 src:
   # Vault URL
   url: http://127.0.0.1:8200/
+
   # Prefix for secrets: only secrets with path starting from this prefix will be synchronized with
   # the target Vault. Use empty string ("") for all secrets.
   prefix: ""
+
+  # Vault namespace, not set by default.
+  # namespace: null
 
   # Path for the secrets engine. For multiple backends use "backends" with a list.
   # Default is single backend "secret".
@@ -49,12 +53,16 @@ src:
 dst:
   # Vault URL
   url: http://127.0.0.1:8200/
+
   # Prefix for secrets: this prefix will replace the corresponding prefix from the 'src' section.
   # This allows syncing a tree of secrets to a non overlapping tree in the same Vault.
   # For example: if src.prefix is "src" and dst.prefix is "dst", then secret "src/secret1" will be
   # synced to "dst/secret1".
   prefix: ""
 
+  # Vault namespace, not set by default.
+  # namespace: null
+  
   # Path for the secrets engine. If "backend" or "backends" not specified for here, then the
   # corresponding configuration for src will be used for dst. Note that currently only the following
   # cases are supported:

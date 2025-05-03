@@ -850,7 +850,7 @@ impl VaultClient<()> {
     ///
     /// A common use case for this method is when a `wrapping_token` has been received and you want
     /// to query the `sys/wrapping/unwrap` endpoint.
-    pub fn new_no_lookup<U, S: Into<String>>(host: U, token: S,namespace: Option<String>) -> Result<VaultClient<()>>
+    pub fn new_no_lookup<U, S: Into<String>>(host: U, token: S, namespace: Option<String>) -> Result<VaultClient<()>>
     where
         U: TryInto<Url, Err = Error>,
     {
@@ -881,7 +881,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let mut client = Client::new(host, token,namespace).unwrap();
+    /// let mut client = Client::new(host, token, namespace).unwrap();
     /// client.secret_backend("my_secrets");
     /// ```
     pub fn secret_backend<S1: Into<String>>(&mut self, backend_name: S1) {
@@ -904,7 +904,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let mut client = Client::new(host, token,namespace).unwrap();
+    /// let mut client = Client::new(host, token, namespace).unwrap();
     ///
     /// client.renew().unwrap();
     /// ```
@@ -929,7 +929,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// let token_to_renew = "test12345";
     /// client.renew_token(token_to_renew, None).unwrap();
@@ -958,14 +958,14 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// // Create a temporary token, and use it to create a new client.
     /// let opts = client::TokenOptions::default()
     ///   .ttl(client::VaultDuration::minutes(5));
     /// let res = client.create_token(&opts).unwrap();
     /// let namespace: Option<String> = None;
-    /// let mut new_client = Client::new(host, res.client_token,namespace).unwrap();
+    /// let mut new_client = Client::new(host, res.client_token, namespace).unwrap();
     ///
     /// // Issue and use a bunch of temporary dynamic credentials.
     ///
@@ -993,7 +993,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// #[derive(Deserialize)]
     /// struct PacketKey {
@@ -1030,7 +1030,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// let res = client.lookup().unwrap();
     /// assert!(res.data.unwrap().policies.len() >= 0);
@@ -1053,7 +1053,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// let opts = client::TokenOptions::default()
     ///   .display_name("test_token")
@@ -1067,7 +1067,7 @@ where
     ///   .explicit_max_ttl(client::VaultDuration::minutes(3));
     /// let res = client.create_token(&opts).unwrap();
     ///  let namespace: Option<String> = None;
-    /// # let new_client = Client::new(host, res.client_token,namespace).unwrap();
+    /// # let new_client = Client::new(host, res.client_token, namespace).unwrap();
     /// # new_client.revoke().unwrap();
     /// ```
     ///
@@ -1091,7 +1091,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.set_secret("hello_set", "world");
     /// assert!(res.is_ok());
     /// ```
@@ -1117,7 +1117,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let secret = MyThing {
     ///   awesome: "I really am cool".into(),
     ///   thing: "this is also in the secret".into(),
@@ -1156,7 +1156,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.set_secret("hello/fred", "world");
     /// assert!(res.is_ok());
     /// let res = client.set_secret("hello/bob", "world");
@@ -1196,7 +1196,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.set_secret("hello_get", "world");
     /// assert!(res.is_ok());
     /// let res = client.get_secret("hello_get");
@@ -1224,7 +1224,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let secret = MyThing {
     ///   awesome: "I really am cool".into(),
     ///   thing: "this is also in the secret".into(),
@@ -1313,7 +1313,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.transit_encrypt(None, "keyname", b"plaintext");
     /// ```
     pub fn transit_encrypt<S1: Into<String>, S2: AsRef<[u8]>>(
@@ -1361,7 +1361,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.transit_decrypt(None, "keyname", b"\x02af\x61bcb\x55d");
     /// ```
     pub fn transit_decrypt<S1: Into<String>, S2: AsRef<[u8]>>(
@@ -1462,7 +1462,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     /// let res = client.set_secret("hello_delete", "world");
     /// assert!(res.is_ok());
     /// let res = client.delete_secret("hello_delete");
@@ -1491,7 +1491,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// #[derive(Deserialize)]
     /// struct PacketKey {
@@ -1520,7 +1520,7 @@ where
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
     /// let namespace: Option<String> = None;
-    /// let client = Client::new(host, token,namespace).unwrap();
+    /// let client = Client::new(host, token, namespace).unwrap();
     ///
     /// let res = client.policies().unwrap();
     /// assert!(res.contains(&"root".to_owned()));
@@ -1763,7 +1763,7 @@ fn handle_reqwest_response(res: StdResult<Response, reqwest::Error>) -> Result<R
 /// let host = "http://127.0.0.1:8200";
 /// let token = "test12345";
 /// let namespace: Option<String> = None;
-/// let client = Client::new(host, token,namespace).unwrap();
+/// let client = Client::new(host, token, namespace).unwrap();
 /// let secret = MyThing {
 ///   awesome: "I really am cool".into(),
 ///   thing: "this is also in the secret".into(),
