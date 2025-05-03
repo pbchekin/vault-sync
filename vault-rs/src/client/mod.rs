@@ -259,6 +259,8 @@ pub struct VaultClient<T> {
     pub host: Url,
     /// Token to access vault
     pub token: String,
+    /// Namespace (optional)
+    pub namespace: Option<String>,
     /// `reqwest::Client`
     client: Client,
     /// Data
@@ -672,23 +674,29 @@ pub enum EndpointResponse<D> {
 
 impl VaultClient<TokenData> {
     /// Construct a `VaultClient` from an existing vault token
-    pub fn new<U, T: Into<String>>(host: U, token: T) -> Result<VaultClient<TokenData>>
+    pub fn new<U, T: Into<String>>(host: U, token: T, namespace: Option<String>) -> Result<VaultClient<TokenData>>
     where
         U: TryInto<Url, Err = Error>,
     {
         let host = host.try_into()?;
         let client = Client::new();
         let token = token.into();
-        let res = handle_reqwest_response(
-            client
-                .get(host.join("/v1/auth/token/lookup-self")?)
-                .header("X-Vault-Token", token.clone())
-                .send(),
-        )?;
+        let mut request = client
+            .get(host.join("/v1/auth/token/lookup-self")?)
+            .header("X-Vault-Token", token.clone());
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<TokenData> = parse_vault_response(res)?;
         Ok(VaultClient {
             host,
             token,
+            namespace,
             client,
             data: Some(decoded),
             secret_backend: "secret".into(),
@@ -700,6 +708,7 @@ impl VaultClient<TokenData> {
         host: U,
         token: T,
         cli: Client,
+        namespace: Option<String>,
     ) -> Result<VaultClient<TokenData>>
     where
         U: TryInto<Url, Err = Error>,
@@ -707,17 +716,23 @@ impl VaultClient<TokenData> {
         let host = host.try_into()?;
         let client = cli;
         let token = token.into();
-        let res = handle_reqwest_response(
-            client
-                .get(host.join("/v1/auth/token/lookup-self")?)
-                .header("X-Vault-Token", token.clone())
-                .send(),
-        )?;
+        let mut request = client
+            .get(host.join("/v1/auth/token/lookup-self")?)
+            .header("X-Vault-Token", token.clone());
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<TokenData> = parse_vault_response(res)?;
         Ok(VaultClient {
             host,
             token,
             client,
+            namespace,
             data: Some(decoded),
             secret_backend: "secret".into(),
             secrets_engine: SecretsEngine::KVV2,
@@ -735,6 +750,7 @@ impl VaultClient<()> {
         host: U,
         app_id: S1,
         user_id: S2,
+        namespace: Option<String>,
     ) -> Result<VaultClient<()>>
     where
         U: TryInto<Url, Err = Error>,
@@ -745,12 +761,17 @@ impl VaultClient<()> {
             app_id: app_id.into(),
             user_id: user_id.into(),
         })?;
-        let res = handle_reqwest_response(
-            client
-                .post(host.join("/v1/auth/app-id/login")?)
-                .body(payload)
-                .send(),
-        )?;
+        let mut request = client
+            .post(host.join("/v1/auth/app-id/login")?)
+            .body(payload);
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<()> = parse_vault_response(res)?;
         let token = match decoded.auth {
             Some(ref auth) => auth.client_token.clone(),
@@ -764,6 +785,7 @@ impl VaultClient<()> {
         Ok(VaultClient {
             host,
             token,
+            namespace,
             client,
             data: Some(decoded),
             secret_backend: "secret".into(),
@@ -777,6 +799,7 @@ impl VaultClient<()> {
         host: U,
         role_id: R,
         secret_id: Option<S>,
+        namespace: Option<String>,
     ) -> Result<VaultClient<()>>
     where
         U: TryInto<Url, Err = Error>,
@@ -785,20 +808,22 @@ impl VaultClient<()> {
     {
         let host = host.try_into()?;
         let client = Client::new();
-        let secret_id = match secret_id {
-            Some(s) => Some(s.into()),
-            None => None,
-        };
+        let secret_id = secret_id.map(|s| s.into());
         let payload = serde_json::to_string(&AppRolePayload {
             role_id: role_id.into(),
             secret_id,
         })?;
-        let res = handle_reqwest_response(
-            client
-                .post(host.join("/v1/auth/approle/login")?)
-                .body(payload)
-                .send(),
-        )?;
+        let mut request = client
+            .post(host.join("/v1/auth/approle/login")?)
+            .body(payload);
+
+        if let Some(ns) = &namespace {
+            if !ns.is_empty() {
+                request = request.header("X-Vault-Namespace", ns.clone());
+            }
+        }
+
+        let res = handle_reqwest_response(request.send())?;
         let decoded: VaultResponse<()> = parse_vault_response(res)?;
         let token = match decoded.auth {
             Some(ref auth) => auth.client_token.clone(),
@@ -812,6 +837,7 @@ impl VaultClient<()> {
         Ok(VaultClient {
             host,
             token,
+            namespace,
             client,
             data: Some(decoded),
             secret_backend: "secret".into(),
@@ -824,7 +850,7 @@ impl VaultClient<()> {
     ///
     /// A common use case for this method is when a `wrapping_token` has been received and you want
     /// to query the `sys/wrapping/unwrap` endpoint.
-    pub fn new_no_lookup<U, S: Into<String>>(host: U, token: S) -> Result<VaultClient<()>>
+    pub fn new_no_lookup<U, S: Into<String>>(host: U, token: S,namespace: Option<String>) -> Result<VaultClient<()>>
     where
         U: TryInto<Url, Err = Error>,
     {
@@ -833,6 +859,7 @@ impl VaultClient<()> {
         Ok(VaultClient {
             host,
             token: token.into(),
+            namespace,
             client,
             data: None,
             secret_backend: "secret".into(),
@@ -853,7 +880,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let mut client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let mut client = Client::new(host, token,namespace).unwrap();
     /// client.secret_backend("my_secrets");
     /// ```
     pub fn secret_backend<S1: Into<String>>(&mut self, backend_name: S1) {
@@ -875,7 +903,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let mut client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let mut client = Client::new(host, token,namespace).unwrap();
     ///
     /// client.renew().unwrap();
     /// ```
@@ -899,7 +928,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// let token_to_renew = "test12345";
     /// client.renew_token(token_to_renew, None).unwrap();
@@ -927,13 +957,15 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// // Create a temporary token, and use it to create a new client.
     /// let opts = client::TokenOptions::default()
     ///   .ttl(client::VaultDuration::minutes(5));
     /// let res = client.create_token(&opts).unwrap();
-    /// let mut new_client = Client::new(host, res.client_token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let mut new_client = Client::new(host, res.client_token,namespace).unwrap();
     ///
     /// // Issue and use a bunch of temporary dynamic credentials.
     ///
@@ -960,7 +992,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// #[derive(Deserialize)]
     /// struct PacketKey {
@@ -996,7 +1029,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// let res = client.lookup().unwrap();
     /// assert!(res.data.unwrap().policies.len() >= 0);
@@ -1018,7 +1052,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// let opts = client::TokenOptions::default()
     ///   .display_name("test_token")
@@ -1031,8 +1066,8 @@ where
     ///   .ttl(client::VaultDuration::minutes(1))
     ///   .explicit_max_ttl(client::VaultDuration::minutes(3));
     /// let res = client.create_token(&opts).unwrap();
-    ///
-    /// # let new_client = Client::new(host, res.client_token).unwrap();
+    ///  let namespace: Option<String> = None;
+    /// # let new_client = Client::new(host, res.client_token,namespace).unwrap();
     /// # new_client.revoke().unwrap();
     /// ```
     ///
@@ -1055,7 +1090,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.set_secret("hello_set", "world");
     /// assert!(res.is_ok());
     /// ```
@@ -1080,7 +1116,8 @@ where
     /// }
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let secret = MyThing {
     ///   awesome: "I really am cool".into(),
     ///   thing: "this is also in the secret".into(),
@@ -1118,7 +1155,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.set_secret("hello/fred", "world");
     /// assert!(res.is_ok());
     /// let res = client.set_secret("hello/bob", "world");
@@ -1128,6 +1166,7 @@ where
     /// assert_eq!(res.unwrap(), ["bob", "fred"]);
     /// ```
     pub fn list_secrets<S: AsRef<str>>(&self, key: S) -> Result<Vec<String>> {
+        let _namespace_prefix = self.namespace.as_deref().unwrap_or_default();
         let endpoint = match self.secrets_engine {
             SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, key.as_ref()),
             SecretsEngine::KVV2 => format!("/v1/{}/metadata/{}", self.secret_backend, key.as_ref()),
@@ -1156,7 +1195,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.set_secret("hello_get", "world");
     /// assert!(res.is_ok());
     /// let res = client.get_secret("hello_get");
@@ -1183,7 +1223,8 @@ where
     /// }
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let secret = MyThing {
     ///   awesome: "I really am cool".into(),
     ///   thing: "this is also in the secret".into(),
@@ -1271,7 +1312,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.transit_encrypt(None, "keyname", b"plaintext");
     /// ```
     pub fn transit_encrypt<S1: Into<String>, S2: AsRef<[u8]>>(
@@ -1318,7 +1360,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.transit_decrypt(None, "keyname", b"\x02af\x61bcb\x55d");
     /// ```
     pub fn transit_decrypt<S1: Into<String>, S2: AsRef<[u8]>>(
@@ -1418,7 +1461,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     /// let res = client.set_secret("hello_delete", "world");
     /// assert!(res.is_ok());
     /// let res = client.delete_secret("hello_delete");
@@ -1446,7 +1490,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// #[derive(Deserialize)]
     /// struct PacketKey {
@@ -1474,7 +1519,8 @@ where
     ///
     /// let host = "http://127.0.0.1:8200";
     /// let token = "test12345";
-    /// let client = Client::new(host, token).unwrap();
+    /// let namespace: Option<String> = None;
+    /// let client = Client::new(host, token,namespace).unwrap();
     ///
     /// let res = client.policies().unwrap();
     /// assert!(res.contains(&"root".to_owned()));
@@ -1493,33 +1539,33 @@ where
         wrap_ttl: Option<S2>,
     ) -> Result<Response> {
         let h = self.host.join(endpoint.as_ref())?;
+        let mut request = self.client.request(Method::GET, h)
+            .header("X-Vault-Token", self.token.to_string())
+            .header(CONTENT_TYPE, "application/json");
+
+        if let Some(namespace) = &self.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
         match wrap_ttl {
             Some(wrap_ttl) => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::GET, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
-                    .header("X-Vault-Wrap-TTL", wrap_ttl.into())
-                    .send(),
+                request.header("X-Vault-Wrap-TTL", wrap_ttl.into()).send(),
             )?),
-            None => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::GET, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
-                    .send(),
-            )?),
+            None => Ok(handle_reqwest_response(request.send())?),
         }
     }
 
     fn delete<S: AsRef<str>>(&self, endpoint: S) -> Result<Response> {
-        Ok(handle_reqwest_response(
-            self.client
-                .request(Method::DELETE, self.host.join(endpoint.as_ref())?)
-                .header("X-Vault-Token", self.token.to_string())
-                .header(CONTENT_TYPE, "application/json")
-                .send(),
-        )?)
+        let mut request = self.client
+            .request(Method::DELETE, self.host.join(endpoint.as_ref())?)
+            .header("X-Vault-Token", self.token.to_string())
+            .header(CONTENT_TYPE, "application/json");
+
+        if let Some(namespace) = &self.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
+        Ok(handle_reqwest_response(request.send())?)
     }
 
     fn post<S1: AsRef<str>, S2: Into<String>>(
@@ -1529,28 +1575,25 @@ where
         wrap_ttl: Option<S2>,
     ) -> Result<Response> {
         let h = self.host.join(endpoint.as_ref())?;
-        let body = if let Some(body) = body {
-            body.to_string()
-        } else {
-            String::new()
-        };
+        let body = body.unwrap_or("").to_string();
+        let mut request = self.client
+            .request(Method::POST, h)
+            .header("X-Vault-Token", self.token.to_string())
+            .header(CONTENT_TYPE, "application/json");
+
+        if let Some(namespace) = &self.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
         match wrap_ttl {
             Some(wrap_ttl) => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::POST, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
+                request
                     .header("X-Vault-Wrap-TTL", wrap_ttl.into())
                     .body(body)
                     .send(),
             )?),
             None => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::POST, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
-                    .body(body)
-                    .send(),
+                request.body(body).send(),
             )?),
         }
     }
@@ -1567,23 +1610,24 @@ where
         } else {
             String::new()
         };
+        let mut request = self.client
+            .request(Method::PUT, h)
+            .header("X-Vault-Token", self.token.to_string())
+            .header(CONTENT_TYPE, "application/json");
+
+        if let Some(namespace) = &self.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
         match wrap_ttl {
             Some(wrap_ttl) => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::PUT, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
+                request
                     .header("X-Vault-Wrap-TTL", wrap_ttl.into())
                     .body(body)
                     .send(),
             )?),
             None => Ok(handle_reqwest_response(
-                self.client
-                    .request(Method::PUT, h)
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
-                    .body(body)
-                    .send(),
+                request.body(body).send(),
             )?),
         }
     }
@@ -1600,29 +1644,27 @@ where
         } else {
             String::new()
         };
+        let mut request = self.client
+            .request(
+                Method::from_str("LIST").expect("Failed to parse LIST to Method"),
+                h,
+            )
+            .header("X-Vault-Token", self.token.to_string())
+            .header(CONTENT_TYPE, "application/json");
+
+        if let Some(namespace) = &self.namespace {
+            request = request.header("X-Vault-Namespace", namespace);
+        }
+
         match wrap_ttl {
             Some(wrap_ttl) => Ok(handle_reqwest_response(
-                self.client
-                    .request(
-                        Method::from_str("LIST".into()).expect("Failed to parse LIST to Method"),
-                        h,
-                    )
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
+                request
                     .header("X-Vault-Wrap-TTL", wrap_ttl.into())
                     .body(body)
                     .send(),
             )?),
             None => Ok(handle_reqwest_response(
-                self.client
-                    .request(
-                        Method::from_str("LIST".into()).expect("Failed to parse LIST to Method"),
-                        h,
-                    )
-                    .header("X-Vault-Token", self.token.to_string())
-                    .header(CONTENT_TYPE, "application/json")
-                    .body(body)
-                    .send(),
+                request.body(body).send(),
             )?),
         }
     }
@@ -1720,7 +1762,8 @@ fn handle_reqwest_response(res: StdResult<Response, reqwest::Error>) -> Result<R
 /// }
 /// let host = "http://127.0.0.1:8200";
 /// let token = "test12345";
-/// let client = Client::new(host, token).unwrap();
+/// let namespace: Option<String> = None;
+/// let client = Client::new(host, token,namespace).unwrap();
 /// let secret = MyThing {
 ///   awesome: "I really am cool".into(),
 ///   thing: "this is also in the secret".into(),

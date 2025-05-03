@@ -56,6 +56,7 @@ pub struct VaultSource {
     pub backend: Option<Backend>,
     #[serde(default)]
     pub version: EngineVersion,
+    pub namespace: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -68,6 +69,7 @@ pub struct VaultDestination {
     pub backend: Option<Backend>,
     #[serde(default)]
     pub version: EngineVersion,
+    pub namespace: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -192,8 +194,8 @@ impl Error for ConfigError {
 }
 
 fn sanitize<S>(_: &str, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+where
+    S: Serializer,
 {
     s.serialize_str("***")
 }
