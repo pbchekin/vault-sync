@@ -1,6 +1,6 @@
 # vault-sync
 
-A poor man's tool to replicate secrets from one Vault instance to another.
+A tool to replicate secrets from one HashiCorp Vault or OpenBao instance to another.
 
 ## How it works
 
