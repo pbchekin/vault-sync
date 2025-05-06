@@ -48,14 +48,13 @@ jobs:
 
     - name: Build OpenBao
       run: |
-        cd openbao
         make bootstrap
         make dev
 
     - uses: actions/upload-artifact@v4
       with:
         name: bao
-        path: openbao/bin/bao
+        path: bin/bao
         if-no-files-found: error
 
   test-vault:
