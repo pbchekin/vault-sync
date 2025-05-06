@@ -6,7 +6,10 @@
 
 set -e -o pipefail
 
-vault server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
+: ${VAULT_BINARY:=vault}
+: ${VAULT_SYNC_BINARY:="cargo run --"}
+
+$VAULT_BINARY server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
 echo $! > vault.pid
 
 function cleanup() {(
@@ -115,7 +118,7 @@ function test_token {(
   vault kv put -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-token.env
-  cargo run -- --config /tmp/vault-sync.yaml --once
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
@@ -128,7 +131,7 @@ function test_app_role {(
   vault kv put -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-app-role.env
-  cargo run -- --config /tmp/vault-sync.yaml --once
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
@@ -143,7 +146,7 @@ function test_token_with_audit_device {(
 
   vault kv put -mount $src_backend ${src_prefix}${secret_name}-1 foo=bar
 
-  cargo run -- --config /tmp/vault-sync.yaml &
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml &
   echo $! > vault-sync.pid
 
   echo Wating for vault-sync to start and make the initial sync ...
@@ -196,7 +199,7 @@ function test_multiple_backends {(
   vault kv put -mount secret11 ${secret_name}-1 foo=bar
   vault kv put -mount secret12 ${secret_name}-1 foo=bar
 
-  cargo run -- --config /tmp/vault-sync.yaml &
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml &
   echo $! > vault-sync.pid
 
   echo Wating for vault-sync to start and make the initial sync ...
