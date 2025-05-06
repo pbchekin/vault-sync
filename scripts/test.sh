@@ -6,9 +6,10 @@
 
 set -e -o pipefail
 
+: ${VAULT_BINARY:=vault}
 : ${VAULT_SYNC_BINARY:="cargo run --"}
 
-vault server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
+$VAULT_BINARY server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
 echo $! > vault.pid
 
 function cleanup() {(
