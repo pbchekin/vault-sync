@@ -2,18 +2,19 @@
 
 # Local test.
 # Requires installed vault.
-# TODO: use vault container instead of locally installed vault.
 
 set -e -o pipefail
 
-vault server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
-echo $! > vault.pid
+: ${VAULT_IMAGE:=hashicorp/vault:latest}
+: ${VAULT_PORT:=8200}
+: ${VAULT_ADDR:=http://127.0.0.1:$VAULT_PORT}
+
+docker run --rm --detach --name vault --publish $VAULT_PORT:8200 --env 'VAULT_DEV_ROOT_TOKEN_ID=unsafe-root-token' $VAULT_IMAGE
 
 function cleanup() {(
   set -e
-  if [[ -f vault.pid ]]; then
-    kill $(<vault.pid) || true
-    rm -f vault.pid
+  if docker container inspect vault &>/dev/null; then
+    docker rm --force vault &>/dev/null || true
   fi
   if [[ -f vault-sync.pid ]]; then
     kill $(<vault-sync.pid) || true
@@ -23,10 +24,22 @@ function cleanup() {(
 
 trap cleanup EXIT
 
-export VAULT_ADDR='http://127.0.0.1:8200'
+# Make it available for subprocesses
+export VAULT_ADDR
 
 # Make sure Vault is running
-while ! vault token lookup; do sleep 1; done
+VAULT_READY=""
+for i in 1 2 3 4 5; do
+  if vault token lookup 2> /dev/null; then
+    VAULT_READY="true"
+    break
+  fi
+  sleep 1
+done
+if [[ ! $VAULT_READY ]]; then
+  echo "vault failed to start"
+  exit 1
+fi
 
 # Enable AppRole auth method
 vault auth enable approle
@@ -162,7 +175,7 @@ function test_token_with_audit_device {(
   fi
 
   # Enable audit device that sends log to vault-sync
-  vault audit enable -path $audit_device_name socket socket_type=tcp address=127.0.0.1:8202
+  vault audit enable -path $audit_device_name socket socket_type=tcp address=172.17.0.1:8202
 
   vault kv put -mount $src_backend ${dst_prefix}${secret_name}-2 foo=bar
 
@@ -219,7 +232,7 @@ function test_multiple_backends {(
   fi
 
   # Enable audit device that sends log to vault-sync
-  vault audit enable -path $audit_device_name socket socket_type=tcp address=127.0.0.1:8202
+  vault audit enable -path $audit_device_name socket socket_type=tcp address=172.17.0.1:8202
 
   vault kv put -mount secret11 ${secret_name}-2 foo=bar
   vault kv put -mount secret12 ${secret_name}-2 foo=bar
@@ -390,7 +403,7 @@ test_token secret2 secret1
 test_app_role secret2 secret1
 
 # Enable audit device that always works
-vault audit enable -path vault-audit file file_path=vault-audit.log
+vault audit enable -path vault-audit file file_path=stdout
 
 # secret/src -> secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
