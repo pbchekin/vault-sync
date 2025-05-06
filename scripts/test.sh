@@ -38,6 +38,7 @@ for i in $(seq 1 30); do
 done
 if [[ ! $VAULT_READY ]]; then
   echo "vault failed to start"
+  docker logs vault
   exit 1
 fi
 
