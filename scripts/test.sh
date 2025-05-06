@@ -29,7 +29,7 @@ export VAULT_ADDR
 
 # Make sure Vault is running
 VAULT_READY=""
-for i in 1 2 3 4 5; do
+for i in $(seq 1 30); do
   if vault token lookup 2> /dev/null; then
     VAULT_READY="true"
     break
