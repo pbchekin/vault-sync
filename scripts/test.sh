@@ -8,8 +8,9 @@ set -e -o pipefail
 : ${VAULT_IMAGE:=hashicorp/vault:latest}
 : ${VAULT_PORT:=8200}
 : ${VAULT_ADDR:=http://127.0.0.1:$VAULT_PORT}
+: ${VAULT_TOKEN:=unsafe-root-token}
 
-docker run --rm --detach --name vault --publish $VAULT_PORT:8200 --env 'VAULT_DEV_ROOT_TOKEN_ID=unsafe-root-token' $VAULT_IMAGE
+docker run --rm --detach --name vault --publish $VAULT_PORT:8200 --env "VAULT_DEV_ROOT_TOKEN_ID=$VAULT_TOKEN" $VAULT_IMAGE
 
 function cleanup() {(
   set -e
@@ -26,6 +27,7 @@ trap cleanup EXIT
 
 # Make it available for subprocesses
 export VAULT_ADDR
+export VAULT_TOKEN
 
 # Make sure Vault is running
 VAULT_READY=""
