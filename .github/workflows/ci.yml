@@ -46,6 +46,8 @@ jobs:
 
     - name: Fix permissions
       run: |
+        ls -lh .
+        ls -lRh vault-sync
         chmod 0755 target/debug/vault-sync
 
     - name: Install Vault
