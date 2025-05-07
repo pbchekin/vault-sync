@@ -145,7 +145,7 @@ jobs:
         echo $PWD >> $GITHUB_PATH
 
     - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh
+      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh --namespaces
 
   kubernetes:
     runs-on: ubuntu-latest
