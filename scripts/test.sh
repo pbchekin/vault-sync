@@ -114,12 +114,25 @@ function test_token {(
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
 
-  vault kv put -mount $src_backend ${src_prefix}${secret_name} foo=bar
+  if [[ $src_namespace ]]; then
+    namespace="-namespace $src_namespace"
+  else
+    namespace=""
+  fi
+ 
+  vault kv put $namespace -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-token.env
   $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
-  vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
-  vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
+
+  if [[ $dst_namespace ]]; then
+    namespace="-namespace $dst_namespace"
+  else
+    namespace=""
+  fi
+ 
+  vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name}
+  vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
 
 function test_app_role {(
@@ -510,3 +523,152 @@ dst:
 EOF
 
 test_multiple_backends
+
+if [[ ! " $@ " =~ " --namespaces " ]]; then
+  exit 0
+fi
+
+vault namespace create ns1
+vault namespace create ns2
+vault namespace create -namespace=ns1 ns11
+vault namespace create -namespace=ns2 ns21
+
+vault secrets enable -namespace=ns1 -version=2 -path=secret kv
+vault secrets enable -namespace=ns2 -version=2 -path=secret kv
+vault secrets enable -namespace=ns1/ns11 -version=2 -path=secret kv
+vault secrets enable -namespace=ns2/ns21 -version=2 -path=secret kv
+
+# ns1/secret -> secret
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1
+dst:
+  url: http://127.0.0.1:8200/
+EOF
+
+src_namespace="ns1"
+dst_namespace=""
+src_prefix=""
+dst_prefix=""
+
+test_token secret
+
+# secret -> ns2/secret
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2
+EOF
+
+src_namespace=""
+dst_namespace="ns2"
+src_prefix=""
+dst_prefix=""
+
+test_token secret
+
+# ns1/secret -> ns2/secret
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2
+EOF
+
+src_namespace="ns1"
+dst_namespace="ns2"
+src_prefix=""
+dst_prefix=""
+
+test_token secret
+
+# ns1/ns11/secret -> ns2/ns21/secret
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1/ns11
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2/ns21
+EOF
+
+src_namespace="ns1/ns11"
+dst_namespace="ns2/ns21"
+src_prefix=""
+dst_prefix=""
+
+test_token secret
+
+# ns1/secret/src -> ns2/secret/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1
+  prefix: src
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2
+  prefix: dst
+EOF
+
+src_namespace="ns1"
+dst_namespace="ns2"
+src_prefix="src/"
+dst_prefix="dst/"
+
+test_token secret
+
+# ns1/secret/src -> ns2/ns21/secret
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1
+  prefix: src
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2/ns21
+EOF
+
+src_namespace="ns1"
+dst_namespace="ns2/ns21"
+src_prefix="src/"
+dst_prefix=""
+
+test_token secret
+
+# ns1/ns11/secret -> ns2/secret/dst
+cat <<EOF > /tmp/vault-sync.yaml
+id: vault-sync
+full_sync_interval: 10
+src:
+  url: http://127.0.0.1:8200/
+  namespace: ns1/ns11
+dst:
+  url: http://127.0.0.1:8200/
+  namespace: ns2
+  prefix: dst
+EOF
+
+src_namespace="ns1/ns11"
+dst_namespace="ns2"
+src_prefix=""
+dst_prefix="dst/"
+
+test_token secret
