@@ -20,6 +20,7 @@ vaultSync:
 #    token_ttl: 86400
 #    token_max_ttl: 2764800
 
+existingSecretName: ""
 # Secrets must be base64 encoded
 secrets:
   VAULT_SYNC_SRC_TOKEN: eHh4
@@ -35,7 +36,7 @@ image:
   repository: pbchekin/vault-sync
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0.9.2"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
