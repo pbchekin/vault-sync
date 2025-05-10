@@ -50,14 +50,21 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: RUST_LOG
-              value: info
-          {{- $secretName := include "vault-sync.fullname" . }}
-          {{- range $key, $value := .Values.secrets }}
+              value: info'
+          {{- if not .Values.existingSecretName }}
+            {{- $secretName := include "vault-sync.fullname" . }}
+            {{- range $key, $_ := .Values.secrets }}
             - name: {{ $key }}
               valueFrom:
                 secretKeyRef:
-                  key: {{ $key }}
                   name: {{ $secretName }}
+                  key: {{ $key }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.existingSecretName }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecretName }}
           {{- end }}
           {{- with .Values.environmentVars }}
           {{- toYaml . | nindent 12 }}
