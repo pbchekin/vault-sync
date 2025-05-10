@@ -22,12 +22,14 @@ vaultSync:
 
 # Secrets must be base64 encoded
 secrets:
-  VAULT_SYNC_SRC_TOKEN: eHh4
-#  VAULT_SYNC_SRC_ROLE_ID: xxx
-#  VAULT_SYNC_SRC_SECRET_ID: xxx
-  VAULT_SYNC_DST_TOKEN: eHh4
-#  VAULT_SYNC_DST_ROLE_ID: xxx
-#  VAULT_SYNC_DST_SECRET_ID: xxx
+  existingSecretName: ""
+  values:
+    VAULT_SYNC_SRC_TOKEN: eHh4
+  #  VAULT_SYNC_SRC_ROLE_ID: xxx
+  #  VAULT_SYNC_SRC_SECRET_ID: xxx
+    VAULT_SYNC_DST_TOKEN: eHh4
+  #  VAULT_SYNC_DST_ROLE_ID: xxx
+  #  VAULT_SYNC_DST_SECRET_ID: xxx
 
 replicaCount: 1
 
