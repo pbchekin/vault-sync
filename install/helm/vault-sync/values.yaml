@@ -37,7 +37,7 @@ image:
   repository: pbchekin/vault-sync
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0.11.0"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
