@@ -84,7 +84,7 @@ jobs:
         vault version
 
     - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh
+      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh
 
   test-bao:
     runs-on: ubuntu-latest
@@ -116,7 +116,7 @@ jobs:
         echo $PWD >> $GITHUB_PATH
 
     - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh
+      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh
 
   test-bao-namespaces:
     runs-on: ubuntu-latest
@@ -145,7 +145,7 @@ jobs:
         echo $PWD >> $GITHUB_PATH
 
     - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh --namespaces
+      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh --namespaces
 
   kubernetes:
     runs-on: ubuntu-latest
