@@ -1,8 +1,6 @@
 #!/bin/bash
 
-# Local test.
-# Requires installed vault.
-# TODO: use vault container instead of locally installed vault.
+# Local test for vault-sync. Requires installed vault.
 
 set -e -o pipefail
 
@@ -119,7 +117,7 @@ function test_token {(
   else
     namespace=""
   fi
- 
+
   vault kv put $namespace -mount $src_backend ${src_prefix}${secret_name} foo=bar
 
   source /tmp/vault-sync-token.env
@@ -130,7 +128,7 @@ function test_token {(
   else
     namespace=""
   fi
- 
+
   vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name}
   vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
 )}
