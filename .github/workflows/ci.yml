@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - '*'
+      - "*"
   pull_request:
     branches:
       - main
@@ -19,224 +19,140 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Run tests
+        run: cargo test --verbose
 
-    - name: Build
-      run: cargo build --verbose
+      - name: Build
+        run: cargo build --verbose
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: vault-sync
-        path: target/debug/vault-sync
-        if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vault-sync
+          path: target/debug/vault-sync
+          if-no-files-found: error
 
   build-bao:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        repository: openbao/openbao
-        ref: namespaces
+      - uses: actions/checkout@v4
+        with:
+          repository: openbao/openbao
+          ref: namespaces
 
-    - uses: actions/setup-go@v5
-      with:
-        go-version: '1.24'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
 
-    - name: Build OpenBao
-      run: |
-        make bootstrap
-        make dev
+      - name: Build OpenBao
+        run: |
+          make bootstrap
+          make dev
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: bao
-        path: bin/bao
-        if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bao
+          path: bin/bao
+          if-no-files-found: error
 
   test-vault:
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: vault-sync
+      - uses: actions/download-artifact@v4
+        with:
+          name: vault-sync
 
-    - name: Fix permissions
-      run: |
-        chmod 0755 ./vault-sync
+      - name: Fix permissions
+        run: |
+          chmod 0755 ./vault-sync
 
-    - name: Install Vault
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y gpg
-        wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null
-        gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
-        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-        sudo apt-get update -y
-        sudo apt-get install -y vault
-        vault version
+      - name: Install Vault
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gpg
+          wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null
+          gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update -y
+          sudo apt-get install -y vault
+          vault version
 
-    - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh
+      - name: Run local test
+        run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh
 
   test-bao:
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install OpenBao
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        LATEST_RELEASE=$(gh release list --repo openbao/openbao --json name,isLatest --jq '.[] | select(.isLatest) | .name')
-        gh release download --repo openbao/openbao $LATEST_RELEASE -p 'bao_*_Linux_x86_64.tar.gz'
-        tar zxf bao_*.tar.gz bao
-        ./bao version
+      - name: Install OpenBao
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_RELEASE=$(gh release list --repo openbao/openbao --json name,isLatest --jq '.[] | select(.isLatest) | .name')
+          gh release download --repo openbao/openbao $LATEST_RELEASE -p 'bao_*_Linux_x86_64.tar.gz'
+          tar zxf bao_*.tar.gz bao
+          ./bao version
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: vault-sync
+      - uses: actions/download-artifact@v4
+        with:
+          name: vault-sync
 
-    - name: Fix permissions
-      run: |
-        chmod 0755 vault-sync
+      - name: Fix permissions
+        run: |
+          chmod 0755 vault-sync
 
-    - name: Use bao instead of vault
-      run: |
-        ln -s bao vault
-        echo $PWD >> $GITHUB_PATH
+      - name: Use bao instead of vault
+        run: |
+          ln -s bao vault
+          echo $PWD >> $GITHUB_PATH
 
-    - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh
+      - name: Run local test
+        run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh
 
   test-bao-namespaces:
     runs-on: ubuntu-latest
     needs:
-    - build
-    - build-bao
+      - build
+      - build-bao
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: vault-sync
+      - uses: actions/download-artifact@v4
+        with:
+          name: vault-sync
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: bao
+      - uses: actions/download-artifact@v4
+        with:
+          name: bao
 
-    - name: Fix permissions
-      run: |
-        chmod 0755 vault-sync bao
+      - name: Fix permissions
+        run: |
+          chmod 0755 vault-sync bao
 
-    - name: Use bao instead of vault
-      run: |
-        ln -s bao vault
-        echo $PWD >> $GITHUB_PATH
+      - name: Use bao instead of vault
+        run: |
+          ln -s bao vault
+          echo $PWD >> $GITHUB_PATH
 
-    - name: Run local test
-      run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test.sh --namespaces
+      - name: Run local test
+        run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh --namespaces
 
   kubernetes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create Kubernetes cluster
-        run: |
-          cat <<EOF | kind create cluster --config=-
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          nodes:
-          - role: control-plane
-            image: kindest/node:v1.29.4
-          EOF
-
-      - name: Deploy Vault
-        run: |
-          kubectl create ns vault
-          helm repo add hashicorp https://helm.releases.hashicorp.com
-          helm upgrade --install vault hashicorp/vault --namespace=vault --set server.dev.enabled=true --set injector.enabled=false
-
-      - name: Wait for Vault readiness
-        run: |
-          kubectl --namespace=vault get service
-          for i in $(seq 1 30); do
-            if kubectl --namespace=vault get pods | grep -q vault-0 &>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          kubectl --namespace=vault wait pod/vault-0 --for=condition=Ready --timeout=180s
-          kubectl --namespace=vault logs vault-0
-
-      - name: Create secret backends
-        run: |
-          kubectl --namespace=vault exec vault-0 -- vault secrets enable -version=2 -path=src kv
-          kubectl --namespace=vault exec vault-0 -- vault secrets enable -version=2 -path=dst kv
-          kubectl --namespace=vault exec vault-0 -- vault kv put -mount src test foo=bar
-
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Run Helm tests
         run: |
-          docker build -t pbchekin/vault-sync:$GITHUB_SHA -f docker/Dockerfile .
-
-      - name: Load Docker image to the cluster
-        run: |
-          kind load docker-image pbchekin/vault-sync:$GITHUB_SHA
-
-      - name: Deploy vault-sync
-        run: |
-          kubectl create ns vault-sync
-          cd install/helm/vault-sync/
-          helm install --namespace=vault-sync vault-sync -f - . <<EOF
-          image:
-            tag: $GITHUB_SHA
-          vaultSync:
-            id: vault-sync
-            full_sync_interval: 3600
-            src:
-              url: http://vault.vault.svc.cluster.local:8200
-              backend: src
-            dst:
-              url: http://vault.vault.svc.cluster.local:8200
-              backend: dst
-          # Secrets must be base64 encoded
-          secrets:
-            VAULT_SYNC_SRC_TOKEN: cm9vdA==
-            VAULT_SYNC_DST_TOKEN: cm9vdA==
-          EOF
-
-      - name: Wait for vault-sync readiness
-        run: |
-          for i in $(seq 1 30); do
-            if kubectl --namespace=vault-sync get pods | grep -q vault-sync &>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          if ! kubectl --namespace=vault-sync wait pod -l app.kubernetes.io/instance=vault-sync --for=condition=Ready --timeout=180s; then
-            kubectl get pods -A
-            kubectl --namespace=vault-sync logs -l app.kubernetes.io/instance=vault-sync
-            exit 1
-          fi
-
-      - name: Check sync result
-        run: |
-          # wait for the initial sync
-          sleep 5
-          kubectl --namespace=vault exec vault-0 -- vault kv get -mount dst test
-
-      - name: Show vault-sync logs
-        run: |
-          kubectl --namespace=vault-sync logs -l app.kubernetes.io/instance=vault-sync
+          ./scripts/test-helm.sh
