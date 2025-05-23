@@ -40,7 +40,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: openbao/openbao
-          ref: namespaces
 
       - uses: actions/setup-go@v5
         with:
