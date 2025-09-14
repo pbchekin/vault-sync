@@ -6,7 +6,25 @@ set -e -o pipefail
 
 : ${VAULT_SYNC_BINARY:="cargo run --"}
 
-vault server -dev -dev-root-token-id=unsafe-root-token &> vault.log &
+VAULT_VERSION="$(vault version)"
+echo "$VAULT_VERSION"
+
+VAULT_ARGS=(
+  server
+  -dev
+  -dev-root-token-id=unsafe-root-token
+)
+
+# Allow creating audit devices via the API.
+# This is required for newer versions of OpenBao, will no work with old versions.
+if [[ $VAULT_VERSION = *OpenBao* ]]; then
+  echo "unsafe_allow_api_audit_creation = true" > openbao.hcl
+  VAULT_ARGS+=(
+    -config=openbao.hcl
+  )
+fi
+
+vault "${VAULT_ARGS[@]}" &> vault.log &
 echo $! > vault.pid
 
 function cleanup() {(
@@ -19,6 +37,7 @@ function cleanup() {(
     kill $(<vault-sync.pid) || true
     rm -f vault-sync.pid
   fi
+  rm -f openbao.hcl
 )}
 
 trap cleanup EXIT
