@@ -15,6 +15,8 @@ VAULT_ARGS=(
   -dev-root-token-id=unsafe-root-token
 )
 
+export VAULT_ADDR='http://127.0.0.1:8200'
+
 # Allow creating audit devices via the API.
 # This is required for newer versions of OpenBao, will no work with old versions.
 if [[ $VAULT_VERSION = *OpenBao* ]]; then
@@ -41,8 +43,6 @@ function cleanup() {(
 )}
 
 trap cleanup EXIT
-
-export VAULT_ADDR='http://127.0.0.1:8200'
 
 # Make sure Vault is running
 while ! vault token lookup; do sleep 1; done
@@ -126,30 +126,81 @@ export VAULT_SYNC_DST_ROLE_ID=$(vault read auth/approle/role/vault-sync-writer/r
 export VAULT_SYNC_DST_SECRET_ID=$(vault write -f auth/approle/role/vault-sync-writer/secret-id -format=json | jq -r .data.secret_id)
 EOF
 
+# Prints namespace argument if provided
+function namespace() {
+  if [[ $1 ]]; then
+    echo "-namespace $1"
+  else
+    echo ""
+  fi
+}
+
 function test_token {(
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
   local secret_name=test-$RANDOM
 
-  if [[ $src_namespace ]]; then
-    namespace="-namespace $src_namespace"
-  else
-    namespace=""
-  fi
-
-  vault kv put $namespace -mount $src_backend ${src_prefix}${secret_name} foo=bar
-
   source /tmp/vault-sync-token.env
+
+  vault kv put $(namespace $src_namespace) -mount $src_backend ${src_prefix}${secret_name} foo=bar
+
   $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
 
-  if [[ $dst_namespace ]]; then
-    namespace="-namespace $dst_namespace"
-  else
-    namespace=""
+  vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name}
+  if ! vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'; then
+    echo "Secret value mismatch for $dst_backend/${dst_prefix}${secret_name}"
+    exit 1
   fi
 
-  vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name}
-  vault kv get $namespace -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
+  # Test updating a secret
+  vault kv put $(namespace $src_namespace) -mount $src_backend ${src_prefix}${secret_name} foo=baz
+
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
+
+  vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name}
+  if ! vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+baz$'; then
+    echo "Secret value mismatch for $dst_backend/${dst_prefix}${secret_name}"
+    exit 1
+  fi
+
+  # Test updating a secret without --once
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml &
+  echo $! > vault-sync.pid
+
+  vault kv put $(namespace $src_namespace) -mount $src_backend ${src_prefix}${secret_name} foo=barbaz
+
+  echo Wating for vault-sync to start and make the initial sync ...
+  VAULT_SYNC_READY=""
+  for i in 1 2 3 4 5; do
+    if vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+barbaz$'; then
+      VAULT_SYNC_READY="true"
+      break
+    fi
+    sleep 1
+  done
+  if [[ ! $VAULT_SYNC_READY ]]; then
+    echo "vault-sync failed to make the initial sync"
+    exit 1
+  fi
+
+  vault kv put $(namespace $src_namespace) -mount $src_backend ${src_prefix}${secret_name} foo=bazbar
+
+  echo Wating for vault-sync to do a full sync ...
+  VAULT_SYNC_READY=""
+  for i in 1 2 3 4 5; do
+    if vault kv get $(namespace $dst_namespace) -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bazbar$'; then
+      VAULT_SYNC_READY="true"
+      break
+    fi
+    sleep 1
+  done
+  if [[ ! $VAULT_SYNC_READY ]]; then
+    echo "vault-sync failed to make the full sync"
+    exit 1
+  fi
+
+  kill $(<vault-sync.pid)
+  rm vault-sync.pid
 )}
 
 function test_app_role {(
@@ -162,7 +213,10 @@ function test_app_role {(
   source /tmp/vault-sync-app-role.env
   $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
   vault kv get -mount $dst_backend ${dst_prefix}${secret_name}
-  vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'
+  if ! vault kv get -mount $dst_backend ${dst_prefix}${secret_name} | grep -qE '^foo\s+bar$'; then
+    echo "Secret value mismatch for $dst_backend/${dst_prefix}${secret_name}"
+    exit 1
+  fi
 )}
 
 function test_token_with_audit_device {(
@@ -284,7 +338,7 @@ function test_multiple_backends {(
 # secret/src -> secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   prefix: src
@@ -302,7 +356,7 @@ test_app_role secret
 # secret1/src -> secret1/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   prefix: src
@@ -324,7 +378,7 @@ test_app_role secret1
 # secret2/src -> secret2/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   prefix: src
@@ -344,7 +398,7 @@ test_app_role secret2
 # secret1/src -> secret2/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   prefix: src
@@ -365,7 +419,7 @@ test_app_role secret1 secret2
 # secret2/src -> secret1/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   prefix: src
@@ -386,7 +440,7 @@ test_app_role secret2 secret1
 # secret1 -> secret2
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   backend: secret1
@@ -405,7 +459,7 @@ test_app_role secret1 secret2
 # secret2 -> secret1
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   backend: secret2
@@ -558,7 +612,7 @@ vault secrets enable -namespace=ns2/ns21 -version=2 -path=secret kv
 # ns1/secret -> secret
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1
@@ -576,7 +630,7 @@ test_token secret
 # secret -> ns2/secret
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
 dst:
@@ -594,7 +648,7 @@ test_token secret
 # ns1/secret -> ns2/secret
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1
@@ -613,7 +667,7 @@ test_token secret
 # ns1/ns11/secret -> ns2/ns21/secret
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1/ns11
@@ -632,7 +686,7 @@ test_token secret
 # ns1/secret/src -> ns2/secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1
@@ -653,7 +707,7 @@ test_token secret
 # ns1/secret/src -> ns2/ns21/secret
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1
@@ -673,7 +727,7 @@ test_token secret
 # ns1/ns11/secret -> ns2/secret/dst
 cat <<EOF > /tmp/vault-sync.yaml
 id: vault-sync
-full_sync_interval: 10
+full_sync_interval: 1
 src:
   url: http://127.0.0.1:8200/
   namespace: ns1/ns11
