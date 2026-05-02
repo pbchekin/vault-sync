@@ -1130,9 +1130,11 @@ where
         S1: Into<String>,
         S2: Serialize,
     {
+        // URL-encode the secret name to handle special characters like backslashes
+        let encoded_name = secret_name.into().replace("\\", "%5C");
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, secret_name.into()),
-            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, secret_name.into()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_name),
+            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, encoded_name),
         };
         let json = match self.secrets_engine {
             SecretsEngine::KVV1 => {
@@ -1167,9 +1169,11 @@ where
     /// ```
     pub fn list_secrets<S: AsRef<str>>(&self, key: S) -> Result<Vec<String>> {
         let _namespace_prefix = self.namespace.as_deref().unwrap_or_default();
+        // URL-encode the key to handle special characters like backslashes
+        let encoded_key = key.as_ref().replace("\\", "%5C");
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, key.as_ref()),
-            SecretsEngine::KVV2 => format!("/v1/{}/metadata/{}", self.secret_backend, key.as_ref()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_key),
+            SecretsEngine::KVV2 => format!("/v1/{}/metadata/{}", self.secret_backend, encoded_key),
         };
         let res = self.list::<_, String>(
             &endpoint,
@@ -1241,9 +1245,11 @@ where
         &self,
         secret_name: S,
     ) -> Result<S2> {
+        // URL-encode the secret name to handle special characters like backslashes
+        let encoded_name = secret_name.as_ref().replace("\\", "%5C");
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, secret_name.as_ref()),
-            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, secret_name.as_ref()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_name),
+            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, encoded_name),
         };
         let res = self.get::<_, String>(&endpoint, None)?;
         match self.secrets_engine {
@@ -1469,9 +1475,11 @@ where
     /// assert!(res.is_ok());
     /// ```
     pub fn delete_secret(&self, key: &str) -> Result<()> {
+        // URL-encode the key to handle special characters like backslashes
+        let encoded_key = key.replace("\\", "%5C");
         let _ = match self.secrets_engine {
-            SecretsEngine::KVV1 => self.delete(&format!("/v1/{}/{}", self.secret_backend, key)[..])?,
-            SecretsEngine::KVV2 => self.delete(&format!("/v1/{}/data/{}", self.secret_backend, key)[..])?,
+            SecretsEngine::KVV1 => self.delete(&format!("/v1/{}/{}", self.secret_backend, encoded_key)[..])?,
+            SecretsEngine::KVV2 => self.delete(&format!("/v1/{}/data/{}", self.secret_backend, encoded_key)[..])?,
         };
         Ok(())
     }
