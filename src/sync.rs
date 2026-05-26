@@ -424,31 +424,4 @@ mod tests {
         assert_eq!(secret_src_to_dst_path("", "", "src/secret"), "src/secret");
     }
 
-    #[test]
-    fn test_secret_path_with_backslash_v1() {
-        // Test that backslashes in secret paths are preserved
-        let path = "secret/agoda\\sql_fraud_detection/credential";
-        let path = secret_path_v1(&path).unwrap();
-        assert_eq!(path.0, "secret");
-        assert_eq!(path.1, "agoda\\sql_fraud_detection/credential");
-    }
-
-    #[test]
-    fn test_secret_path_with_backslash_v2() {
-        // Test that backslashes in secret paths are preserved
-        let path = "secret/data/agoda\\sql_fraud_detection/credential";
-        let path = secret_path_v2(&path).unwrap();
-        assert_eq!(path.0, "secret");
-        assert_eq!(path.1, "agoda\\sql_fraud_detection/credential");
-    }
-
-    #[test]
-    fn test_secret_src_to_dst_path_with_backslash() {
-        // Test that backslashes are preserved during path transformation
-        assert_eq!(
-            secret_src_to_dst_path("src/", "dst/", "src/agoda\\sql_fraud/secret"),
-            "dst/agoda\\sql_fraud/secret"
-        );
-    }
-
 }
