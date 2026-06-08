@@ -1130,9 +1130,10 @@ where
         S1: Into<String>,
         S2: Serialize,
     {
+        let encoded_name = url_encode_path(&secret_name.into());
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, secret_name.into()),
-            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, secret_name.into()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_name),
+            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, encoded_name),
         };
         let json = match self.secrets_engine {
             SecretsEngine::KVV1 => {
@@ -1167,9 +1168,10 @@ where
     /// ```
     pub fn list_secrets<S: AsRef<str>>(&self, key: S) -> Result<Vec<String>> {
         let _namespace_prefix = self.namespace.as_deref().unwrap_or_default();
+        let encoded_key = url_encode_path(key.as_ref());
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, key.as_ref()),
-            SecretsEngine::KVV2 => format!("/v1/{}/metadata/{}", self.secret_backend, key.as_ref()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_key),
+            SecretsEngine::KVV2 => format!("/v1/{}/metadata/{}", self.secret_backend, encoded_key),
         };
         let res = self.list::<_, String>(
             &endpoint,
@@ -1241,9 +1243,10 @@ where
         &self,
         secret_name: S,
     ) -> Result<S2> {
+        let encoded_name = url_encode_path(secret_name.as_ref());
         let endpoint = match self.secrets_engine {
-            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, secret_name.as_ref()),
-            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, secret_name.as_ref()),
+            SecretsEngine::KVV1 => format!("/v1/{}/{}", self.secret_backend, encoded_name),
+            SecretsEngine::KVV2 => format!("/v1/{}/data/{}", self.secret_backend, encoded_name),
         };
         let res = self.get::<_, String>(&endpoint, None)?;
         match self.secrets_engine {
@@ -1469,9 +1472,10 @@ where
     /// assert!(res.is_ok());
     /// ```
     pub fn delete_secret(&self, key: &str) -> Result<()> {
+        let encoded_key = url_encode_path(key);
         let _ = match self.secrets_engine {
-            SecretsEngine::KVV1 => self.delete(&format!("/v1/{}/{}", self.secret_backend, key)[..])?,
-            SecretsEngine::KVV2 => self.delete(&format!("/v1/{}/data/{}", self.secret_backend, key)[..])?,
+            SecretsEngine::KVV1 => self.delete(&format!("/v1/{}/{}", self.secret_backend, encoded_key)[..])?,
+            SecretsEngine::KVV2 => self.delete(&format!("/v1/{}/data/{}", self.secret_backend, encoded_key)[..])?,
         };
         Ok(())
     }
@@ -1670,6 +1674,35 @@ where
     }
 }
 
+/// URL-encode a path for use in Vault API requests
+/// Handles special characters including spaces, backslashes, and multi-byte UTF-8 characters
+/// Path segments (separated by /) are encoded individually to preserve the path structure
+fn url_encode_path(path: &str) -> String {
+    path.split('/')
+        .map(|segment| {
+            segment
+                .chars()
+                .flat_map(|c| {
+                    match c {
+                        // Unreserved characters (RFC 3986)
+                        'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => {
+                            vec![c.to_string()]
+                        },
+                        // Encode everything else including spaces, backslashes, and multi-byte chars
+                        _ => {
+                            // Encode each UTF-8 byte of the character
+                            let mut buf = [0u8; 4];
+                            let bytes = c.encode_utf8(&mut buf).as_bytes();
+                            bytes.iter().map(|b| format!("%{:02X}", b)).collect()
+                        }
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<String>>()
+        .join("/")
+}
+
 /// helper fn to check `Response` for success
 fn handle_reqwest_response(res: StdResult<Response, reqwest::Error>) -> Result<Response> {
     let mut res = res?;
@@ -1810,5 +1843,71 @@ where
         Ok(EndpointResponse::VaultResponse(serde_json::from_str(
             &body,
         )?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::url_encode_path;
+
+    #[test]
+    fn unreserved_characters_are_not_encoded() {
+        let path = "abcXYZ-_.~0123456789";
+        assert_eq!(url_encode_path(path), path);
+    }
+
+    #[test]
+    fn slashes_are_preserved() {
+        assert_eq!(url_encode_path("foo/bar/baz"), "foo/bar/baz");
+    }
+
+    #[test]
+    fn backslashes_are_encoded() {
+        assert_eq!(
+            url_encode_path("agoda\\sql_fraud_detection/credential"),
+            "agoda%5Csql_fraud_detection/credential"
+        );
+    }
+
+    #[test]
+    fn spaces_are_encoded() {
+        assert_eq!(url_encode_path("foo bar/baz qux"), "foo%20bar/baz%20qux");
+    }
+
+    #[test]
+    fn reserved_characters_are_encoded() {
+        assert_eq!(
+            url_encode_path("a+b&c=d?e#f"),
+            "a%2Bb%26c%3Dd%3Fe%23f"
+        );
+    }
+
+    #[test]
+    fn multibyte_utf8_characters_are_encoded() {
+        // Thai "สวัสดี" (hello) — each char is 3 UTF-8 bytes
+        assert_eq!(
+            url_encode_path("สวัสดี"),
+            "%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5"
+        );
+    }
+
+    #[test]
+    fn empty_path_returns_empty_string() {
+        assert_eq!(url_encode_path(""), "");
+    }
+
+    #[test]
+    fn empty_segments_are_preserved() {
+        // Leading, trailing, and consecutive slashes produce empty segments
+        assert_eq!(url_encode_path("/foo/"), "/foo/");
+        assert_eq!(url_encode_path("foo//bar"), "foo//bar");
+    }
+
+    #[test]
+    fn mixed_special_characters_per_segment() {
+        assert_eq!(
+            url_encode_path("path with space/has\\backslash/正常"),
+            "path%20with%20space/has%5Cbackslash/%E6%AD%A3%E5%B8%B8"
+        );
     }
 }
