@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct AuditLog {
@@ -14,17 +14,4 @@ pub struct Request {
     pub operation: String,
     pub mount_type: Option<String>,
     pub path: String,
-}
-
-#[derive(Serialize, Debug)]
-pub struct CreateAuditDeviceRequest {
-    #[serde(rename = "type")]
-    pub audit_device_type: String,
-    pub options: AuditDeviceOptions,
-}
-
-#[derive(Serialize, Debug)]
-pub struct AuditDeviceOptions {
-    pub address: String,
-    pub socket_type: String,
 }
