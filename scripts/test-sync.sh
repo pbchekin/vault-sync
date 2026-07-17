@@ -203,6 +203,25 @@ function test_token {(
   rm vault-sync.pid
 )}
 
+# Tests syncing a secret with the given name (e.g. containing special characters)
+function test_token_secret_name {(
+  local src_backend=$1
+  local dst_backend=${2:-$src_backend}
+  local secret_name=$3
+
+  source /tmp/vault-sync-token.env
+
+  vault kv put $(namespace $src_namespace) -mount $src_backend "${src_prefix}${secret_name}" foo=bar
+
+  $VAULT_SYNC_BINARY --config /tmp/vault-sync.yaml --once
+
+  vault kv get $(namespace $dst_namespace) -mount $dst_backend "${dst_prefix}${secret_name}"
+  if ! vault kv get $(namespace $dst_namespace) -mount $dst_backend "${dst_prefix}${secret_name}" | grep -qE '^foo\s+bar$'; then
+    echo "Secret value mismatch for $dst_backend/${dst_prefix}${secret_name}"
+    exit 1
+  fi
+)}
+
 function test_app_role {(
   local src_backend=$1
   local dst_backend=${2:-$src_backend}
@@ -352,6 +371,9 @@ dst_prefix="dst/"
 
 test_token secret
 test_app_role secret
+
+# Secret name with a backslash (tests URL-encoding of \ in API paths)
+test_token_secret_name secret secret "test-$RANDOM\\backslash"
 
 # secret1/src -> secret1/dst
 cat <<EOF > /tmp/vault-sync.yaml
