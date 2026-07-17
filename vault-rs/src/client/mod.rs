@@ -316,12 +316,6 @@ pub struct SecretDataWrapper<D> {
     pub data: D,
 }
 
-/// Actual Secret data, used in `VaultResponse`
-#[derive(Deserialize, Serialize, Debug)]
-struct SecretData {
-    value: String,
-}
-
 /// Transit decrypted data, used in `VaultResponse`
 #[derive(Deserialize, Serialize, Debug)]
 struct TransitDecryptedData {
