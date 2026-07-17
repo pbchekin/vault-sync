@@ -77,8 +77,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LATEST_RELEASE=$(gh release list --repo openbao/openbao --json name,isLatest --jq '.[] | select(.isLatest) | .name')
-          gh release download --repo openbao/openbao $LATEST_RELEASE -p 'bao_*_Linux_x86_64.tar.gz'
-          tar zxf bao_*.tar.gz bao
+          gh release download --repo openbao/openbao $LATEST_RELEASE -p 'openbao_*_linux_amd64.tar.gz'
+          tar zxf openbao_*.tar.gz bao
           ./bao version
 
       - uses: actions/download-artifact@v4
