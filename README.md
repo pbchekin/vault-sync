@@ -163,6 +163,40 @@ Command line options:
 * `--to-file FILE` exports the secrets from the source Vault to the specified file, then exits.
 * `--from-file FILE` imports the secrets from the specified file to the destination Vault, then exits.
 
+### Exporting and importing secrets
+
+Instead of replicating the secrets directly, vault-sync can export them from the source Vault to a
+JSON file, and import them from the file to the destination Vault:
+
+```shell
+vault-sync --config vault-sync.yaml --to-file secrets.json
+vault-sync --config vault-sync.yaml --from-file secrets.json
+```
+
+The file contains the latest version of every secret, grouped by the secret backend:
+
+```json
+{
+  "secret": {
+    "path/to/secret": {
+      "key": "value"
+    }
+  }
+}
+```
+
+The secret paths in the file are relative to the prefixes: exporting strips `src.prefix` from the
+paths, importing prepends `dst.prefix` to them.
+The backend names in the file are the source backends, on import they are mapped to the
+destination backends the same way as for the regular sync.
+
+Exporting uses the source Vault only, importing uses the destination Vault only, so only the
+credentials for the Vault that is actually used are required.
+`--dry-run` can be used with `--from-file`: vault-sync reports the secrets it is going to create or
+update, but does not change the destination Vault.
+
+The file contains the secrets in clear text, so vault-sync creates it with the permissions 0600.
+
 ## Installation
 
 ### From source code

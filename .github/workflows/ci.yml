@@ -65,6 +65,9 @@ jobs:
       - name: Run local test
         run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh
 
+      - name: Run local file test
+        run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-file.sh
+
   test-bao:
     runs-on: ubuntu-latest
     needs: build
@@ -96,6 +99,9 @@ jobs:
 
       - name: Run local test
         run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-sync.sh --namespaces
+
+      - name: Run local file test
+        run: VAULT_SYNC_BINARY=./vault-sync ./scripts/test-file.sh
 
   kubernetes:
     runs-on: ubuntu-latest
