@@ -15,6 +15,7 @@ use crate::config::{EngineVersion, get_backends};
 
 mod audit;
 mod config;
+mod file;
 mod sync;
 mod vault;
 
@@ -36,9 +37,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg(Arg::with_name("once")
             .long("once")
             .help("Run the full sync once, then exit"))
+        .arg(Arg::with_name("to-file")
+            .long("to-file")
+            .value_name("FILE")
+            .help("Export secrets from the source Vault to a file, then exit")
+            .conflicts_with("from-file")
+            .takes_value(true))
+        .arg(Arg::with_name("from-file")
+            .long("from-file")
+            .value_name("FILE")
+            .help("Import secrets from a file to the destination Vault, then exit")
+            .takes_value(true))
         .get_matches();
 
-    let config = load_config(matches.value_of("config").unwrap())?;
+    let to_file = matches.value_of("to-file");
+    let from_file = matches.value_of("from-file");
+    let dry_run = matches.is_present("dry-run");
+
+    // Exporting to a file does not use the destination Vault, importing from a file does not use
+    // the source Vault, so only the credentials for the Vault actually used are required.
+    let config = load_config(
+        matches.value_of("config").unwrap(),
+        from_file.is_none(),
+        to_file.is_none(),
+    )?;
+
+    if let Some(file_name) = to_file {
+        info!("Connecting to {}", &config.src.host.url);
+        let src_client = vault_client(&config.src.host, &config.src.version, config.src.namespace.clone())?;
+        return file::export(&config, Arc::new(Mutex::new(src_client)), file_name);
+    }
+
+    if let Some(file_name) = from_file {
+        info!("Connecting to {}", &config.dst.host.url);
+        info!("Dry run: {}", dry_run);
+        let dst_client = vault_client(&config.dst.host, &config.dst.version, config.dst.namespace.clone())?;
+        return file::import(&config, Arc::new(Mutex::new(dst_client)), file_name, dry_run);
+    }
+
     let (tx, rx): (mpsc::Sender<sync::SecretOp>, mpsc::Receiver<sync::SecretOp>) = mpsc::channel();
 
     let log_sync = match &config.bind {
@@ -66,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &config,
         shared_src_client.clone(),
         shared_dst_client.clone(),
-        matches.is_present("dry-run"),
+        dry_run,
         matches.is_present("once"),
     );
 
@@ -93,8 +129,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn load_config(file_name: &str) -> Result<VaultSyncConfig, Box<dyn Error>> {
-    match VaultSyncConfig::from_file(file_name) {
+fn load_config(file_name: &str, src_auth: bool, dst_auth: bool) -> Result<VaultSyncConfig, Box<dyn Error>> {
+    match VaultSyncConfig::from_file(file_name, src_auth, dst_auth) {
         Ok(config) => {
             info!("Configuration from {}:\n{}", file_name, serde_json::to_string_pretty(&config).unwrap());
             Ok(config)

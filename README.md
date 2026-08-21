@@ -160,6 +160,8 @@ Command line options:
 
 * `--dry-run` vault-sync shows all the changes it is going to make to the destination Vault, but does not do any actual changes.
 * `--once` runs the full sync once, then exits.
+* `--to-file FILE` exports the secrets from the source Vault to the specified file, then exits.
+* `--from-file FILE` imports the secrets from the specified file to the destination Vault, then exits.
 
 ## Installation
 

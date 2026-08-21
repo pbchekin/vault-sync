@@ -105,20 +105,23 @@ impl Default for EngineVersion {
 }
 
 impl VaultSyncConfig {
-    pub fn from_file(file_name: &str) -> Result<VaultSyncConfig, Box<dyn Error>> {
+    // Loads the configuration file. Authentication is required only for the Vault instances
+    // the current mode actually connects to: the source is not used when importing from a file,
+    // the destination is not used when exporting to a file.
+    pub fn from_file(file_name: &str, src_auth: bool, dst_auth: bool) -> Result<VaultSyncConfig, Box<dyn Error>> {
         let file = File::open(file_name)?;
         let mut config: VaultSyncConfig = serde_yaml::from_reader(file)?;
-        config.auth_from_env()?;
+        config.auth_from_env(src_auth, dst_auth)?;
         config.defaults()?;
         config.validate()?;
         Ok(config)
     }
 
-    fn auth_from_env(&mut self) -> Result<(), Box<dyn Error>> {
-        if self.src.host.auth.is_none() {
+    fn auth_from_env(&mut self, src_auth: bool, dst_auth: bool) -> Result<(), Box<dyn Error>> {
+        if src_auth && self.src.host.auth.is_none() {
             self.src.host.auth = Some(VaultAuthMethod::from_env("VAULT_SYNC_SRC")?);
         }
-        if self.dst.host.auth.is_none() {
+        if dst_auth && self.dst.host.auth.is_none() {
             self.dst.host.auth = Some(VaultAuthMethod::from_env("VAULT_SYNC_DST")?);
         }
         Ok(())

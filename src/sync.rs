@@ -168,8 +168,8 @@ pub fn log_sync(config: &VaultSyncConfig, stream: TcpStream, tx: mpsc::Sender<Se
 
 #[derive(Debug)]
 pub struct SecretPath{
-    mount: String,
-    path: String,
+    pub mount: String,
+    pub path: String,
 }
 
 #[derive(Debug)]
@@ -339,7 +339,7 @@ fn secret_path_v2(path: &str) -> Option<(String, String)> {
     }
 }
 
-fn normalize_prefix(prefix: &str) -> String {
+pub fn normalize_prefix(prefix: &str) -> String {
     if prefix.len() == 0 {
         return "".to_string();
     }
