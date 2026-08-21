@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use std::time;
 
+use hashicorp_vault::client::error::Error as VaultError;
 use log::{info, warn};
 use serde_json::Value;
 
@@ -55,8 +56,14 @@ pub fn export(
                 secrets.entry(path.mount).or_insert_with(Backend::new).insert(name.to_string(), secret);
             },
             Err(error) => {
-                warn!("Failed to get secret {}: {}", &path.path, error);
-                failed += 1;
+                // A secret can be listed, but not readable, for example when all the versions of
+                // a KV v2 secret are deleted. There is nothing to export in this case.
+                if is_not_found(&error) {
+                    info!("Skipping deleted secret {}", &path.path);
+                } else {
+                    warn!("Failed to get secret {}: {}", &path.path, error);
+                    failed += 1;
+                }
             }
         }
     }
@@ -146,6 +153,13 @@ pub fn import(
         return Err(format!("Failed to import {} secrets from {}", failed, file_name).into());
     }
     Ok(())
+}
+
+fn is_not_found(error: &VaultError) -> bool {
+    match error {
+        VaultError::VaultResponse(_, response) => response.status().as_u16() == 404,
+        _ => false,
+    }
 }
 
 fn read_file(file_name: &str) -> Result<Secrets, Box<dyn Error>> {
